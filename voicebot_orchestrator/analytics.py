@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from io import StringIO
+from .datetime_utils import DateTimeFormatter
 
 
 class AnalyticsEngine:
@@ -212,10 +213,10 @@ class AnalyticsEngine:
     
     def export_to_csv(self, output_file: Optional[str] = None, hours_back: int = 24) -> str:
         """
-        Export session data to CSV.
+        Export session data to CSV with standardized filename format.
         
         Args:
-            output_file: Output file path (optional)
+            output_file: Output file path (optional, uses standardized format if not provided)
             hours_back: Number of hours to look back
             
         Returns:
@@ -238,10 +239,11 @@ class AnalyticsEngine:
             df.to_csv(output_file, index=False)
             return output_file
         else:
-            # Return CSV content as string
-            csv_buffer = StringIO()
-            df.to_csv(csv_buffer, index=False)
-            return csv_buffer.getvalue()
+            # Generate standardized filename
+            timestamp = time.time()
+            output_file = DateTimeFormatter.get_analytics_export_filename(timestamp)
+            df.to_csv(output_file, index=False)
+            return output_file
     
     def generate_report(self, hours_back: int = 24) -> str:
         """
@@ -357,7 +359,8 @@ TTS MOS Score: {kpis['tts_mos_score']}/5.0
         plt.tight_layout()
         
         if not output_file:
-            output_file = self.data_dir / f"performance_chart_{int(time.time())}.png"
+            timestamp = time.time()
+            output_file = self.data_dir / DateTimeFormatter.get_performance_chart_filename(timestamp)
         
         plt.savefig(output_file, dpi=150, bbox_inches='tight')
         plt.close()

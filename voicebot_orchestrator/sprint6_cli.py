@@ -14,6 +14,7 @@ from argparse import ArgumentParser, Namespace
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
+from .datetime_utils import DateTimeFormatter
 
 # Internal imports with comprehensive fallback
 try:
@@ -480,7 +481,8 @@ async def cache_manager(
             
         elif operation == "export":
             if not export_file:
-                export_file = f"cache_export_{int(time.time())}.json"
+                timestamp = time.time()
+                export_file = DateTimeFormatter.get_cache_export_filename(timestamp)
             
             cache_data = cli.cache.export_cache()
             with open(export_file, 'w') as f:

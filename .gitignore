@@ -102,3 +102,13 @@ credentials/
 *.pem
 *.crt
 *.csr
+
+# Kokoro TTS models (large files)
+kokoro-v1.0.onnx
+voices-v1.0.bin
+
+# Audio output files
+*.wav
+*.mp3
+tests/audio_samples/
+demos/audio_output/
