@@ -1,0 +1,24 @@
+# Sprint 3 Analytics and Monitoring Dependencies
+# Note: These are optional dependencies for full functionality
+
+# Core dependencies (already included in Sprints 1-2)
+fastapi>=0.104.0
+websockets>=11.0
+python-dotenv>=1.0.0
+
+# Sprint 3 Analytics Dependencies
+# prometheus_client>=0.19.0  # Prometheus metrics
+# opentelemetry-api>=1.21.0  # OpenTelemetry tracing
+# opentelemetry-sdk>=1.21.0  # OpenTelemetry SDK
+# pandas>=2.1.0             # Data analysis
+# numpy>=1.24.0             # Numerical computing
+# matplotlib>=3.7.0         # Visualization
+# requests>=2.31.0          # HTTP requests
+
+# Development/Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# The Sprint 3 implementation includes mock fallbacks for development
+# without requiring the analytics dependencies to be installed.
+# For production deployment, uncomment the analytics dependencies above.

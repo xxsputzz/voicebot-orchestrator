@@ -1,0 +1,4 @@
+session_id,timestamp,duration,stt_latency,llm_latency,tts_latency,message_count,fcr,csat
+session-001,2025-08-28T14:00:00,45.2,0.15,0.89,0.31,3,true,4.5
+session-002,2025-08-28T14:05:00,62.1,0.18,0.92,0.28,4,true,4.2
+session-003,2025-08-28T14:10:00,38.7,0.14,0.85,0.33,2,false,3.8

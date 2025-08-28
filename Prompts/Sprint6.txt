@@ -1,0 +1,134 @@
+Executive SummaryModern voicebots are at the vanguard of frictionless, natural conversation in banking, contact centers, and beyond. With the maturation of high-accuracy STT like OpenAI’s Whisper, powerful open or hosted LLMs such as Mistral, and fast, multi-lingual TTS (e.g., Kokoro), the technical barrier for DIY enterprise voicebot stacks has lowered dramatically. Yet, unlocking true business value demands much more than simply gluing STT, LLM, and TTS modules together. Orchestration, CLI tooling for devops, analytics for measurement, domain logic (e.g., loan calculation), compliance, semantic cache optimization, and LoRA adapter training are each crucial for an enterprise-grade, scalable system.This comprehensive report maps out the development and delivery of a Python-based, modular voicebot orchestration system across six sprints, each focusing on a key architectural or domain goal. For each sprint, we explain component roles, selected tech, CLI command examples, analytics strategies, and robust testing plans. Special attention is paid to bank-domain logic, compliance, microservice/package architecture, and performance optimizations, ensuring that the resultant solution is both scalable and compliant with water-tight governance. We conclude with a full tech stack and pip package summary.Tech Stack & Pip Package TableComponentTechnology / LibraryPip PackagesSpeech-to-Text (STT)Whisper (OpenAI/HF)openai-whisper, torchaudio, transformers, ffmpeg-pythonLarge Language Model (LLM)Mistral (API or hosted)mistral-ai, llm-mistral, langchain-mistralaiText-to-Speech (TTS)Kokoro (KPipeline)kokoro, misaki[en], espeak-ngCLI ToolingPython CLIstyper, click, rich, argparse, chainlitOrchestration/MicroservicesFastAPI, websocketsfastapi, websockets, aiohttp, python-dotenvAnalytics & MonitoringPrometheus, Grafana, OpenTelemetryprometheus-client, opentelemetry-api, pandas, matplotlibSemantic CacheFaiss, Sentence Transformersfaiss-cpu, sentence-transformers, redisAdapter TrainingPyTorch, peft, bitsandbytestorch, peft, bitsandbytes, transformersPackage ManagementPoetry, PyInstaller, Dockerpoetry, pyinstaller, dockerData Persistence/CacheRedis, sqliteredis, sqlite3Testing/CIPytest, Botium, Sipfrontpytest, botium-core, sipfront-apiDomain Logic (Banking)Custom Pythonnumpy, pandasAll commands assume Python 3.10+ and Linux/macOS.
+
+
+
+You are an expert Python developer and DevOps engineer. Your goal is to implement Sprint 6 of our voice-bot orchestration platform, covering packaging, containerization, microservices deployment, and runtime optimization. Follow these instructions exactly.
+
+---
+
+## 1. Context & Scope  
+- Package all orchestrator modules into installable Python packages with Poetry (`pyproject.toml`).  
+- Build Docker images for six microservices:  
+  1. orchestrator-core  
+  2. stt-service  
+  3. tts-service  
+  4. llm-service  
+  5. cache-service  
+  6. analytics-service  
+- Provide Docker Compose and (optionally) Kubernetes manifests for production: health checks, rolling updates, auto-scaling.  
+- Optimize performance: use `async` IO, prefetching, model warm-up, resource quotas.  
+- Expose CLI commands:  
+  - `start-call`  
+  - `monitor-session`  
+  - `analytics-report`  
+  - `cache-manager`  
+  - `adapter-control`  
+  - `orchestrator-health`
+
+---
+
+## 2. Python Code Generation Restrictions  
+
+### Environment & Version  
+- Use **Python 3.11** only.  
+- Only import from the standard library, plus `pandas`, `numpy`, `requests`.  
+- No OS-specific commands or compilation steps.
+
+### Security & Safety  
+- Do not delete/modify files outside allowed paths.  
+- No outbound network calls unless explicitly instructed.  
+- No shell execution (`os.system`, `subprocess`) with untrusted input.  
+- No hardcoded secrets.  
+- No `eval()` or `exec()`.  
+- Prevent command-injection vulnerabilities.
+
+### Performance & Efficiency  
+- Avoid loading files >1 GB into memory.  
+- Avoid O(n²) loops or deep recursion for large n.  
+- Favor vectorized `numpy`/`pandas` operations.  
+- Limit recursion depth and redundant recomputation.
+
+### Code Style & Readability  
+- Follow PEP 8: `snake_case` for variables, `UPPER_CASE` for constants.  
+- Include type hints on all functions/methods.  
+- Add docstrings for public APIs.  
+- Short comments for key logic.  
+- No dead code or unused imports.
+
+### Functional Restrictions  
+- Functions must return consistent types.  
+- Avoid globals; prefer side-effect-free functions.  
+- No interactive prompts (`input()`, `getpass()`) unless required.  
+- Validate inputs and raise appropriate exceptions.  
+- Aim for idempotent behavior.
+
+### Testing & Validation  
+- Provide `assert`-based unit tests and edge-case tests.  
+- Include exception tests for invalid inputs.  
+- Do not assume fixed file paths unless specified.
+
+---
+
+## 3. Deliverables  
+
+1. **pyproject.toml** (orchestrator-core)  
+   - Metadata, dependencies, and CLI entry points.  
+2. **Dockerfile** for `orchestrator-core`  
+   - Read config/secrets from environment variables.  
+3. **docker-compose.yml**  
+   - Stub for all six services with basic health checks and inter-service networks.  
+4. **Kubernetes manifests** (optional)  
+   - `Deployment` and `Service` for `orchestrator-core`.  
+5. **cli.py** (Python CLI module)  
+   - Register commands: `start_call`, `monitor_session`, `analytics_report`, `cache_manager`, `adapter_control`, `orchestrator_health`.  
+   - Use `async def` handlers, type hints, and proper error handling.  
+6. **test_cli.py**  
+   - `assert`-based tests for at least one happy-path command and one edge case.  
+
+---
+
+## 4. Sample Code Snippet
+
+```python
+# cli.py
+import asyncio
+import os
+from argparse import ArgumentParser
+from typing import Any, Dict
+
+VERSION: str = "1.0.0"
+
+async def start_call(session_id: str) -> Dict[str, Any]:
+    """
+    Initiate a new call session asynchronously.
+    """
+    if not session_id:
+        raise ValueError("session_id must be provided")
+    # TODO: orchestration logic
+    return {"session_id": session_id, "status": "started"}
+
+async def orchestrator_health() -> Dict[str, str]:
+    """
+    Return liveness/readiness status.
+    """
+    return {"status": "healthy", "version": VERSION}
+
+def main() -> None:
+    parser = ArgumentParser(prog="orchestrator-core")
+    sub = parser.add_subparsers(dest="command")
+
+    sub.add_parser("start-call", help="Initiate a new voicebot session")
+    sub.add_parser("orchestrator-health", help="Check system liveness/readiness")
+    # add other commands...
+
+    args = parser.parse_args()
+    if args.command == "start-call":
+        result = asyncio.run(start_call("demo-session"))
+        print(result)
+    elif args.command == "orchestrator-health":
+        print(asyncio.run(orchestrator_health()))
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()

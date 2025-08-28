@@ -1,0 +1,16 @@
+{
+  "created_at": 1234567890.0,
+  "last_activity": 1234567950.0,
+  "conversation_history": [
+    {
+      "user_input": "Hello",
+      "bot_response": "Hi there!",
+      "timestamp": 1234567891.0
+    },
+    {
+      "user_input": "How are you?",
+      "bot_response": "I'm doing well!",
+      "timestamp": 1234567920.0
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+You are a senior Python engineer tasked with Sprint 1 of a modular, real‐time voicebot orchestrator. Generate the necessary Python microservice code, CLI tooling, and tests, strictly following the “Python Code Generation Restrictions” below. After scaffolding the code, review the Sprint 1 plan and let me know if any critical pieces are missing.
+---
+### Python Code Generation Restrictions (Prompt Template)
+Environment & Version Constraints- Use Python 3.11 only.- Only use specified libraries (standard library, pandas, numpy, requests) — do not import any others.- No system-level dependencies; avoid OS-specific commands, apt-get, or compilation.
+Security & Safety- Do not delete/modify files outside allowed paths.- Do not make network calls unless explicitly instructed.- Do not execute shell commands with untrusted input.- Do not include hardcoded secrets.- Do not use `eval()` or `exec()`.- Avoid command injection vulnerabilities.
+Performance & Efficiency- Avoid loading files >1 GB into memory.- Avoid O(n²) algorithms for large n; prefer efficient implementations.- Use vectorized operations where possible; only loop if necessary.- Avoid unnecessary recomputation.- Limit recursion depth.
+Code Style & Readability- Follow PEP 8: snake_case, UpperCase constants.- Include type hints on all functions/methods.- Add docstrings for public functions/classes.- Include short comments explaining key logic.- No dead code or unused imports.
+Functional Restrictions- Functions must have consistent input/output types.- Avoid global variables; favor side-effect-free functions.- Do not use interactive prompts (`input()`, `getpass()`).- Handle invalid input gracefully; raise `ValueError` or similar.- Prefer idempotent functions.
+Testing & Validation- Include simple `assert` test cases.- Cover edge cases (empty input, None, zero-length arrays).- Include exception tests for error handling.- Do not assume specific file paths unless instructed.
+---
+### Sprint 1: Voicebot Orchestrator Initialization and Pipeline Foundation
+**Tasks**  1. Skeleton FastAPI microservice with WebSocket event loop.  2. Real-time pipeline: Whisper STT → local Mistral LLM → Kokoro TTS.  3. Persistent session state handling.  4. CLI commands:     - `start-call --session-id <id>`     - `stt-test --input <path>`     - `tts-test --text <text>`
+**Tech Stack**  - FastAPI + `websockets`  - Whisper (Hugging Face)  - Locally hosted Mistral (model path via env var)  - Kokoro TTS (`kokoro`, `misaki[en]`, `espeak-ng`)  - CLI: `typer`  - Env: `python-dotenv`  - Testing: `pytest`, `pytest-asyncio`
+---
+### Sample Code Snippet
+```python# orchestrator/main.pyfrom fastapi import FastAPI, WebSocket, HTTPExceptionfrom pydantic import BaseSettingsimport asyncio
+class Settings(BaseSettings):    whisper_model: str    mistral_model_path: str    kokoro_voice: str    kokoro_language: str    class Config:        env_file = ".env"
+settings = Settings()app = FastAPI()
+@app.websocket("/ws/{session_id}")async def call_session(ws: WebSocket, session_id: str):    await ws.accept()    semaphore = asyncio.Semaphore(2)    try:        while True:            audio_bytes = await ws.receive_bytes()            async with semaphore:                text = await asyncio.to_thread(transcribe_audio, audio_bytes, settings.whisper_model)                # TODO: replace echo with real Mistral inference                response_text = await asyncio.to_thread(infer_mistral, text, settings.mistral_model_path)                audio_out = await asyncio.to_thread(synthesize_speech, response_text, settings.kokoro_voice, settings.kokoro_language)            await ws.send_bytes(audio_out)    except Exception:        await ws.close()
+
+
+
+

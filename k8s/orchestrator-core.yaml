@@ -1,0 +1,386 @@
+# Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: voicebot-orchestrator
+  labels:
+    name: voicebot-orchestrator
+    environment: production
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orchestrator-config
+  namespace: voicebot-orchestrator
+data:
+  config.json: |
+    {
+      "orchestrator": {
+        "host": "0.0.0.0",
+        "port": 8000,
+        "workers": 4,
+        "timeout": 300
+      },
+      "microservices": {
+        "stt_service": "http://stt-service:8001",
+        "llm_service": "http://llm-service:8002",
+        "tts_service": "http://tts-service:8003",
+        "cache_service": "http://cache-service:8004",
+        "analytics_service": "http://analytics-service:8005"
+      },
+      "cache": {
+        "redis_url": "redis://redis-service:6379",
+        "similarity_threshold": 0.20,
+        "max_cache_size": 10000
+      }
+    }
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: voicebot-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command: ["redis-server", "--appendonly", "yes"]
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          timeoutSeconds: 1
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+          requests:
+            memory: "128Mi"
+            cpu: "125m"
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: redis-pvc
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: voicebot-orchestrator
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+---
+# Redis PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: voicebot-orchestrator
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Orchestrator Core Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator-core
+  namespace: voicebot-orchestrator
+  labels:
+    app: orchestrator-core
+    version: v1.0.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: orchestrator-core
+  template:
+    metadata:
+      labels:
+        app: orchestrator-core
+        version: v1.0.0
+    spec:
+      containers:
+      - name: orchestrator-core
+        image: voicebot-orchestrator:1.0.0
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: ORCHESTRATOR_HOST
+          value: "0.0.0.0"
+        - name: ORCHESTRATOR_PORT
+          value: "8000"
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: STT_SERVICE_URL
+          value: "http://stt-service:8001"
+        - name: LLM_SERVICE_URL
+          value: "http://llm-service:8002"
+        - name: TTS_SERVICE_URL
+          value: "http://tts-service:8003"
+        - name: CACHE_SERVICE_URL
+          value: "http://cache-service:8004"
+        - name: ANALYTICS_SERVICE_URL
+          value: "http://analytics-service:8005"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config.json
+          subPath: config.json
+        - name: cache-volume
+          mountPath: /app/cache
+        - name: adapters-volume
+          mountPath: /app/adapters
+        - name: logs-volume
+          mountPath: /app/logs
+      volumes:
+      - name: config-volume
+        configMap:
+          name: orchestrator-config
+      - name: cache-volume
+        persistentVolumeClaim:
+          claimName: cache-pvc
+      - name: adapters-volume
+        persistentVolumeClaim:
+          claimName: adapters-pvc
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: logs-pvc
+      serviceAccountName: orchestrator-service-account
+---
+# Orchestrator Core Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator-core-service
+  namespace: voicebot-orchestrator
+  labels:
+    app: orchestrator-core
+spec:
+  selector:
+    app: orchestrator-core
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+# Orchestrator Core Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orchestrator-core-ingress
+  namespace: voicebot-orchestrator
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - voicebot.example.com
+    secretName: voicebot-tls
+  rules:
+  - host: voicebot.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: orchestrator-core-service
+            port:
+              number: 8000
+---
+# PersistentVolumeClaims
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cache-pvc
+  namespace: voicebot-orchestrator
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adapters-pvc
+  namespace: voicebot-orchestrator
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logs-pvc
+  namespace: voicebot-orchestrator
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orchestrator-service-account
+  namespace: voicebot-orchestrator
+---
+# HorizontalPodAutoscaler for auto-scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: orchestrator-core-hpa
+  namespace: voicebot-orchestrator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: orchestrator-core
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+---
+# NetworkPolicy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: orchestrator-network-policy
+  namespace: voicebot-orchestrator
+spec:
+  podSelector:
+    matchLabels:
+      app: orchestrator-core
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: nginx-ingress
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 8001  # STT Service
+    - protocol: TCP
+      port: 8002  # LLM Service
+    - protocol: TCP
+      port: 8003  # TTS Service
+    - protocol: TCP
+      port: 8004  # Cache Service
+    - protocol: TCP
+      port: 8005  # Analytics Service
