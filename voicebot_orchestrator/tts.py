@@ -77,29 +77,40 @@ class KokoroTTS:
                 # Try different initialization approaches
                 try:
                     # Approach 1: Use the high-level kokoro_tts if available
+                    print("🔍 Trying high-level kokoro_tts interface...")
                     import kokoro_tts
                     self._kokoro_engine = kokoro_tts.Kokoro()
                     print("✅ Using high-level kokoro_tts interface")
                     return True
-                except ImportError:
-                    pass
+                except Exception as e:
+                    print(f"⚠️ High-level kokoro_tts failed: {e}")
                 
                 # Approach 2: Use kokoro_onnx with model paths
-                model_file = "kokoro-v1.0.onnx"
-                voices_file = "voices-v1.0.bin"
+                print("🔍 Trying kokoro_onnx with local models...")
+                # Look for models in the project root directory
+                project_root = Path(__file__).parent.parent
+                model_file = project_root / "kokoro-v1.0.onnx"
+                voices_file = project_root / "voices-v1.0.bin"
+                
+                print(f"🔍 Looking for models in project root: {project_root}")
+                print(f"  Model path: {model_file}")
+                print(f"  Voices path: {voices_file}")
                 
                 import os
-                if os.path.exists(model_file) and os.path.exists(voices_file):
+                if model_file.exists() and voices_file.exists():
+                    print("🔍 Models found, initializing Kokoro...")
                     self._kokoro_engine = Kokoro(
-                        model_path=model_file,
-                        voices_path=voices_file
+                        model_path=str(model_file),
+                        voices_path=str(voices_file)
                     )
-                    print("✅ Kokoro TTS engine loaded with local models")
+                    print(f"✅ Kokoro TTS engine loaded with local models")
+                    print(f"  Model: {model_file}")
+                    print(f"  Voices: {voices_file}")
                     return True
                 else:
                     print(f"⚠️ Kokoro models not found:")
-                    print(f"  Model file: {model_file} - exists: {os.path.exists(model_file)}")
-                    print(f"  Voices file: {voices_file} - exists: {os.path.exists(voices_file)}")
+                    print(f"  Model file: {model_file} - exists: {model_file.exists()}")
+                    print(f"  Voices file: {voices_file} - exists: {voices_file.exists()}")
                     return False
                     
             except Exception as e:

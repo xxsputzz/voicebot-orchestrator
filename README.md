@@ -45,7 +45,215 @@ orchestrator orchestrator-health
 
 ## 🚀 Quick Start
 
-### Option 1: CLI Demo (Recommended)
+### Option 1: Enhanced CLI (Recommended)
+```bash
+git clone https://github.com/your-username/voicebot-orchestrator.git
+cd voicebot-orchestrator
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start Enhanced CLI (Interactive Mode)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py
+
+# Or use specific commands
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py --help
+```
+
+### Option 2: Docker Compose (Production)
+```bash
+# All services with monitoring
+docker-compose --profile monitoring up
+
+# Access dashboards:
+# - Grafana: http://localhost:3000
+# - Prometheus: http://localhost:9090
+# - API docs: http://localhost:8000/docs
+```
+
+### Option 3: Kubernetes (Enterprise)
+```bash
+kubectl apply -f k8s/orchestrator-core.yaml
+kubectl get pods -n voicebot-orchestrator
+```
+
+## 🎭 Modular Voicebot CLI
+
+The new Modular CLI provides efficient service management with on-demand initialization, preventing GPU memory conflicts.
+
+### 🚀 **Quick Access**
+
+```bash
+# Navigate to project directory
+cd C:\Users\miken\Desktop\Orkestra
+
+# Start Modular CLI (Interactive Mode)
+.venv\Scripts\python.exe voicebot_orchestrator\modular_cli.py
+
+# Quick commands
+.venv\Scripts\python.exe voicebot_orchestrator\modular_cli.py --status
+.venv\Scripts\python.exe voicebot_orchestrator\modular_cli.py --health-check
+
+# Or use convenience launcher
+voicebot_cli.bat
+```
+
+### 🎯 **Main Features**
+- **🚀 No Auto-Loading**: Services initialize only when needed
+- **💾 GPU Memory Efficient**: Load only required TTS engines  
+- **🎯 Clean Interface**: 6-8 main options with organized submenus
+- **🎙️ Voice Pipeline**: Dedicated STT→LLM→TTS conversation flow
+
+### 📋 **Main Menu Structure**
+
+1. **🎙️ Voice Pipeline** - Full conversation (STT→LLM→TTS)
+2. **🔧 Service Management** - Initialize/manage microservices
+3. **🧪 Testing & Demos** - Run tests and demonstrations  
+4. **🎵 Audio Generation** - Direct TTS text-to-speech
+5. **🏥 Health & Diagnostics** - System health and benchmarks
+6. **📚 Documentation** - Help and guides
+
+### ⚡ **Service Initialization**
+```bash
+# Services start unloaded (no GPU memory usage)
+# Initialize only what you need:
+
+# Option 1: Through CLI menus
+# 2. Service Management → 1. Initialize STT
+# 2. Service Management → 3. Initialize TTS Kokoro
+
+# Option 2: Voice Pipeline auto-initializes required services
+# 1. Voice Pipeline → 1. Start Voice Conversation
+```
+# Run dual TTS demonstration
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py demo
+
+# Run specific tests
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py test nari-proper
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py test nari-quick
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py test tts-comparison
+```
+
+#### **System Health & Diagnostics**
+```bash
+# Comprehensive system health check
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py health-check
+
+# Performance benchmarks
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py benchmark --engines all
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py benchmark --engines kokoro
+```
+
+### 🎤 **Interactive Mode Commands**
+
+Start interactive mode and use these commands:
+
+- `help` - Show all available commands with descriptions
+- `status` - Display TTS engine status and GPU information
+- `speak <text>` - Generate speech with current engine
+- `auto <text>` - Auto-select best engine and generate speech
+- `kokoro` / `nari` - Switch between TTS engines
+- `switch` - Interactive engine selection menu
+- `test` - Run engine comparison test
+- `conversation` - Start voice conversation mode
+- `demo` - Run dual TTS demonstration
+- `nari-test <type>` - Run specific Nari Dia tests
+- `health` - Comprehensive system health check
+- `benchmark` - Performance benchmark tests
+- `quit` / `exit` - Exit the CLI
+
+### 🎯 **TTS Engine Options**
+
+The CLI supports dual TTS engines with different strengths:
+
+#### **🚀 Kokoro TTS (Fast)**
+- **Speed**: ~0.8s generation (real-time capable)
+- **Voice**: af_bella (professional African female)
+- **Best for**: Real-time conversation, interactive responses
+- **Usage**: `--engine kokoro` or `kokoro` in interactive mode
+
+#### **🎭 Nari Dia-1.6B (Quality)**
+- **Speed**: ~3+ minutes generation (high quality)
+- **Voice**: Adaptive dialogue-focused
+- **Best for**: Pre-recorded messages, maximum quality
+- **Requirements**: CUDA-enabled GPU
+- **Usage**: `--engine nari_dia` or `nari` in interactive mode
+
+### 💡 **Usage Examples**
+
+#### **Quick Testing**
+```bash
+# Check if everything is working
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py health-check
+
+# Test Kokoro (fast)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py --text "Testing Kokoro TTS"
+
+# Test performance
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py benchmark --engines kokoro
+```
+
+#### **Voice Conversation**
+```bash
+# Start real-time conversation
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py conversation --engine kokoro
+
+# High-quality conversation (slower)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py conversation --engine nari_dia
+```
+
+#### **Development & Research**
+```bash
+# Run proven Nari Dia test
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py test nari-proper
+
+# Compare engine performance
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py test tts-comparison
+
+# Full system demonstration
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py demo
+```
+
+### 🛠️ **Setup Requirements**
+
+#### **Prerequisites**
+- Python 3.11+
+- Virtual environment activated (`.venv`)
+- CUDA-enabled GPU (for Nari Dia TTS)
+- Ollama service running (for LLM)
+
+#### **Quick Setup**
+```bash
+# Ensure virtual environment is activated
+.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify setup
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py health-check
+```
+
+### 🔧 **Troubleshooting**
+
+#### **Common Issues**
+```bash
+# If CLI won't start
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py health-check
+
+# If Nari Dia fails
+# Check CUDA: Should show "CUDA available: True"
+
+# If voice conversation has issues
+# Try Kokoro first: --engine kokoro
+```
+
+#### **Performance Notes**
+- **Kokoro**: Real-time capable (~0.8s), perfect for conversation
+- **Nari Dia**: High quality (~3+ min), best for non-real-time use
+- **Auto mode**: Automatically selects best engine based on context
+
+### Option 2: CLI Demo (Original)
 ```bash
 git clone https://github.com/your-username/voicebot-orchestrator.git
 cd voicebot-orchestrator
@@ -339,6 +547,40 @@ Sprint 1 provides the foundation. Upcoming sprints will add:
 - **Advanced compliance** features
 - **Microservices architecture** expansion
 - **Production deployment** configurations
+
+## 📚 Quick Reference
+
+### **Most Common Commands**
+```bash
+# Start Modular CLI
+.venv\Scripts\python.exe voicebot_orchestrator\modular_cli.py
+
+# Check service status
+.venv\Scripts\python.exe voicebot_orchestrator\modular_cli.py --status
+
+# Health check
+.venv\Scripts\python.exe voicebot_orchestrator\modular_cli.py --health-check
+
+# Quick launcher
+voicebot_cli.bat
+```
+
+### **Service Management Strategy**
+- **🚀 Start Clean**: No services loaded = no GPU memory usage
+- **🎯 Load on Demand**: Initialize only what you need
+- **💾 Memory Efficient**: Avoid loading both TTS engines simultaneously
+- **🔄 Smart Pipeline**: Voice conversation auto-initializes required services
+
+### **Main Workflow**
+1. **Start CLI**: `voicebot_cli.bat` or `modular_cli.py`
+2. **Choose Pipeline**: Option 1 (Voice Pipeline) for conversation
+3. **Auto-Initialize**: System loads STT, LLM, and preferred TTS
+4. **Clean Exit**: Services automatically cleaned up
+
+### **TTS Engine Selection**
+- **🚀 Kokoro**: Fast (~0.8s) - Recommended for conversation
+- **🎭 Nari Dia**: Quality (~3min) - Use for high-quality recordings only
+- **⚠️ Memory Warning**: Loading both engines uses ~8GB GPU memory
 
 ## License
 

@@ -1,0 +1,154 @@
+{
+  "intents": [
+    {
+      "intent": "eligibility_1",
+      "category": "Eligibility",
+      "examples": ["Do I qualify?", "Am I eligible?", "Who can enroll?", "Can anyone join?", "What makes me eligible?"],
+      "response": "Eligibility is usually for individuals with $10,000 or more in unsecured debt. We can review your situation to see if you qualify."
+    },
+    {
+      "intent": "eligibility_2",
+      "category": "Eligibility",
+      "examples": ["I only have credit card debt, is that ok?", "Are credit cards included?", "Does it cover my cards?", "Can I settle credit card debt?", "Will credit cards qualify?"],
+      "response": "Yes, most credit card debts are included in debt settlement programs."
+    },
+    {
+      "intent": "eligibility_3",
+      "category": "Eligibility",
+      "examples": ["What about medical bills?", "I have hospital debt, does it count?", "Are medical expenses included?", "Can I settle medical bills?", "Is doctor debt covered?"],
+      "response": "Medical bills are considered unsecured debt and can usually be included in our program."
+    },
+    {
+      "intent": "eligibility_4",
+      "category": "Eligibility",
+      "examples": ["Can student loans be settled?", "I have private student loans, do they count?", "What about federal loans?", "Are my student loans included?", "Can you help with school debt?"],
+      "response": "Most federal student loans cannot be included, but some private student loans may qualify. We’ll review your account."
+    },
+    {
+      "intent": "eligibility_5",
+      "category": "Eligibility",
+      "examples": ["Do I need a job?", "Can unemployed people join?", "Is income required?", "Do I have to be working?", "What if I’m not employed?"],
+      "response": "Stable income helps with monthly deposits, but unemployment does not automatically disqualify you."
+    },
+    {
+      "intent": "eligibility_6",
+      "category": "Eligibility",
+      "examples": ["What is the minimum debt?", "How much do I need to owe?", "Is there a debt minimum?", "Do I need 10k or more?", "What if I have less than 10k?"],
+      "response": "Most programs require at least $10,000 in unsecured debt to be eligible."
+    },
+    {
+      "intent": "eligibility_7",
+      "category": "Eligibility",
+      "examples": ["Can I include collections accounts?", "Accounts in collections count?", "What if debt is charged off?", "Do settled accounts qualify?", "Collections debt included?"],
+      "response": "Yes, accounts in collections can usually be negotiated and settled."
+    },
+    {
+      "intent": "eligibility_8",
+      "category": "Eligibility",
+      "examples": ["I rent a home, can I join?", "Does homeownership matter?", "Is renting an issue?", "Do I need to own a house?", "Can renters qualify?"],
+      "response": "Homeownership is not required. Unsecured debt amount is the main eligibility factor."
+    },
+    {
+      "intent": "eligibility_9",
+      "category": "Eligibility",
+      "examples": ["Can I include business debts?", "Are business loans covered?", "What about small business credit?", "Can company debts be settled?", "Business accounts included?"],
+      "response": "Some business-related unsecured debts may qualify, like business credit cards. We’ll review your accounts."
+    },
+    {
+      "intent": "eligibility_10",
+      "category": "Eligibility",
+      "examples": ["What debts are not included?", "Which debts can’t be settled?", "Are secured debts allowed?", "Does mortgage count?", "What about car loans?"],
+      "response": "Secured debts like mortgages and auto loans typically cannot be included in debt settlement programs."
+    },
+    {
+      "intent": "eligibility_11",
+      "category": "Eligibility",
+      "examples": ["Do collections agencies matter?", "Are accounts with collectors eligible?", "What if my debt is in collections?", "Can you settle defaulted debt?", "Charged-off accounts?"],
+      "response": "Yes, many clients enroll after accounts are in collections. We can negotiate with creditors regardless."
+    },
+    {
+      "intent": "eligibility_12",
+      "category": "Eligibility",
+      "examples": ["Is there a max debt?", "How much debt can I include?", "Do you limit total debt?", "Maximum enrollment?", "Can I include all my debt?"],
+      "response": "There is generally no strict maximum. All qualifying unsecured debts can be included."
+    },
+    {
+      "intent": "eligibility_13",
+      "category": "Eligibility",
+      "examples": ["Are credit unions included?", "Can I settle credit union loans?", "Do smaller lenders count?", "Are local banks included?", "Will my credit union debts qualify?"],
+      "response": "Yes, we work with a variety of creditors including credit unions and regional banks."
+    },
+    {
+      "intent": "eligibility_14",
+      "category": "Eligibility",
+      "examples": ["Can I join if I’m retired?", "Do retirees qualify?", "Is age a factor?", "Are older individuals eligible?", "I’m on retirement income, can I enroll?"],
+      "response": "Yes, age is not a factor. Retirees can participate if they meet the debt requirements."
+    },
+    {
+      "intent": "eligibility_15",
+      "category": "Eligibility",
+      "examples": ["What about joint accounts?", "Are shared debts included?", "Can spouses enroll together?", "Joint credit cards qualify?", "Does co-signed debt count?"],
+      "response": "Joint or co-signed unsecured debts may qualify depending on the creditor. We’ll review each case."
+    },
+    {
+      "intent": "eligibility_16",
+      "category": "Eligibility",
+      "examples": ["Do medical collections qualify?", "I have hospital collections, can you help?", "Medical collection accounts included?", "Unpaid doctor bills count?", "Are overdue medical bills eligible?"],
+      "response": "Yes, medical collection accounts are generally considered for debt settlement programs."
+    },
+    {
+      "intent": "eligibility_17",
+      "category": "Eligibility",
+      "examples": ["I have multiple debts under 10k, can I combine?", "Can smaller debts be aggregated?", "Do small debts qualify if total is high?", "Combine multiple accounts?", "Does adding small debts help?"],
+      "response": "Yes, multiple smaller unsecured debts can be combined to meet eligibility criteria."
+    },
+    {
+      "intent": "eligibility_18",
+      "category": "Eligibility",
+      "examples": ["Can I join if I’m self-employed?", "Do freelancers qualify?", "Are contract workers eligible?", "Independent contractors included?", "What about gig economy income?"],
+      "response": "Self-employed individuals can participate. The program looks at your income and debt levels to ensure feasibility."
+    },
+    {
+      "intent": "eligibility_19",
+      "category": "Eligibility",
+      "examples": ["Do past bankruptcies affect eligibility?", "I filed bankruptcy, can I enroll?", "Is previous bankruptcy a problem?", "Does Chapter 7 prevent joining?", "Will past bankruptcy disqualify me?"],
+      "response": "Past bankruptcy does not automatically disqualify you. Each case is evaluated individually."
+    },
+    {
+      "intent": "eligibility_20",
+      "category": "Eligibility",
+      "examples": ["Can I enroll with disputed debts?", "I have accounts under dispute, eligible?", "Do disputed bills count?", "Pending debt disputes?", "Disputed credit cards included?"],
+      "response": "Disputed debts may still be included, depending on the resolution status. We can review each account."
+    },
+    {
+      "intent": "eligibility_21",
+      "category": "Eligibility",
+      "examples": ["Can I include past due taxes?", "What about IRS debt?", "Do tax debts count?", "Federal tax obligations included?", "Back taxes eligible?"],
+      "response": "Federal or secured tax debts generally cannot be included in debt settlement programs."
+    },
+    {
+      "intent": "eligibility_22",
+      "category": "Eligibility",
+      "examples": ["Can I join if I just got laid off?", "Unemployment eligibility?", "Lost my job recently, can I enroll?", "Income gap affect joining?", "Currently unemployed, eligible?"],
+      "response": "Recent unemployment doesn’t automatically disqualify you. We can structure the program based on your expected income."
+    },
+    {
+      "intent": "eligibility_23",
+      "category": "Eligibility",
+      "examples": ["Are payday loans included?", "Can I settle short-term loans?", "Do small lenders count?", "High-interest loans eligible?", "Payday debts included?"],
+      "response": "Certain unsecured payday loans may qualify depending on the lender. We’ll review your accounts."
+    },
+    {
+      "intent": "eligibility_24",
+      "category": "Eligibility",
+      "examples": ["Can I enroll if I’m in another program?", "Already in credit counseling, eligible?", "Debt management program conflict?", "Other debt relief program?", "Currently enrolled elsewhere?"],
+      "response": "Participation in other programs may affect enrollment. We’ll review your situation to ensure compatibility."
+    },
+    {
+      "intent": "eligibility_25",
+      "category": "Eligibility",
+      "examples": ["Can I join if I recently missed payments?", "Missed payments affect eligibility?", "Delinquent accounts?", "Late on bills, qualify?", "Defaulted on some accounts?"],
+      "response": "Recent missed payments do not prevent you from enrolling. Debt settlement programs often work best after some delinquencies."
+    }
+  ]
+}

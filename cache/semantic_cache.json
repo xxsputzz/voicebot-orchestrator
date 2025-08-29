@@ -1,1 +1,462 @@
-{}
+
+[
+  {
+    "intent": "greeting_1",
+    "category": "General",
+    "examples": [
+      "Hi",
+      "Hello",
+      "Good morning",
+      "Hey there",
+      "Greetings",
+      "Hi there",
+      "Good afternoon",
+      "Howdy",
+      "Helo",
+      "Hiii"
+    ],
+    "response": "Hello! How can I help you with your account today?"
+  },
+  {
+    "intent": "farewell_1",
+    "category": "General",
+    "examples": [
+      "Bye",
+      "Goodbye",
+      "See you later",
+      "Talk to you soon",
+      "Thanks, bye",
+      "See ya",
+      "Catch you later",
+      "Bye bye",
+      "Good night",
+      "Byee"
+    ],
+    "response": "Thank you for calling. Have a great day!"
+  },
+  {
+    "intent": "thanks_1",
+    "category": "General",
+    "examples": [
+      "Thanks",
+      "Thank you",
+      "Appreciate it",
+      "Thanks a lot",
+      "Cheers",
+      "Much appreciated",
+      "Ta",
+      "Thanks!",
+      "Thnaks"
+    ],
+    "response": "You’re welcome! Let me know if there’s anything else."
+  },
+  {
+    "intent": "apology_1",
+    "category": "General",
+    "examples": [
+      "Sorry about that",
+      "I apologize",
+      "My mistake",
+      "Oops",
+      "Forgive me",
+      "I’m sorry",
+      "My apologies",
+      "Pardon me",
+      "I’m srry"
+    ],
+    "response": "No worries at all. How can I assist you further?"
+  },
+  {
+    "intent": "unknown_1",
+    "category": "General",
+    "examples": [
+      "Blah blah",
+      "I don’t know what to say",
+      "Random text",
+      "12345",
+      "Gibberish",
+      "I have no clue",
+      "No idea",
+      "Bleh",
+      "Blahh"
+    ],
+    "response": "I’m not sure I understand. Could you please rephrase?"
+  },
+  {
+    "intent": "eligibility_1",
+    "category": "Eligibility",
+    "examples": [
+      "Am I eligible for a card?",
+      "Do I qualify for this account?",
+      "Can I apply?",
+      "Who can join?",
+      "What are the requirements?",
+      "Can I get approved for a card?",
+      "Do I meet the eligibility?",
+      "Am I qualified?",
+      "Ee-lih-juh-bility"
+    ],
+    "response": "To qualify, you need to be 18+, a U.S. resident, and have no recent major derogatory credit events."
+  },
+  {
+    "intent": "eligibility_2",
+    "category": "Eligibility",
+    "examples": [
+      "I rent a home, can I join?",
+      "Does homeownership matter?",
+      "Is renting an issue?",
+      "Do I need to own a house?",
+      "Can renters qualify?",
+      "I’m a renter, can I sign up?",
+      "Do I have to own my home?",
+      "Renting an issue?",
+      "Rentin'?"
+    ],
+    "response": "Homeownership is not required. Unsecured debt amount is the main eligibility factor."
+  },
+  {
+    "intent": "eligibility_3",
+    "category": "Eligibility",
+    "examples": [
+      "Is there a minimum credit score?",
+      "What credit score do I need?",
+      "Score requirements?",
+      "Credit threshold?",
+      "Do you check my score?",
+      "Minimum score needed?",
+      "What’s the lowest credit score I need?",
+      "Credit scorr?"
+    ],
+    "response": "We look for a minimum credit score of 620, though final approval considers multiple factors."
+  },
+  {
+    "intent": "account_balance_1",
+    "category": "Account",
+    "examples": [
+      "What’s my checking balance?",
+      "How much do I have in savings?",
+      "Account balance, please",
+      "Balance inquiry",
+      "Show me my balance",
+      "Balance check please",
+      "How much is in my account?",
+      "Acount balance?"
+    ],
+    "response": "Your current checking balance is $2,345.67 and savings balance is $5,120.34."
+  },
+  {
+    "intent": "account_details_1",
+    "category": "Account",
+    "examples": [
+      "What’s my account number?",
+      "Last four of my account?",
+      "Tell me my account info",
+      "Account details",
+      "Which type of account do I have?",
+      "Can you tell me my account number?",
+      "What’s my acct number?",
+      "Ack-knownt"
+    ],
+    "response": "Your primary checking account ends in 1234. It’s a Standard Checking account."
+  },
+  {
+    "intent": "payment_due_date_1",
+    "category": "Payments",
+    "examples": [
+      "When is my payment due?",
+      "Due date for this month?",
+      "Next payment date?",
+      "When do I have to pay?",
+      "Payment deadline?",
+      "When’s the due date?",
+      "Due date for this bill?",
+      "Doo date?"
+    ],
+    "response": "Your next minimum payment of $45.00 is due on September 10, 2025."
+  },
+  {
+    "intent": "payment_amount_1",
+    "category": "Payments",
+    "examples": [
+      "How much do I owe?",
+      "Outstanding balance?",
+      "What’s my statement balance?",
+      "Amount due?",
+      "Current payment amount?",
+      "What’s outstanding?",
+      "How much is owed?",
+      "Outstaning?"
+    ],
+    "response": "Your statement balance is $1,234.56. Minimum due is $45.00."
+  },
+  {
+    "intent": "payment_methods_1",
+    "category": "Payments",
+    "examples": [
+      "How can I pay?",
+      "Payment options?",
+      "Pay by phone?",
+      "Online payment methods?",
+      "Auto-pay setup?",
+      "Different ways to pay?",
+      "Methods of payment?",
+      "Paymant methods?"
+    ],
+    "response": "You can pay online, via mobile app, by mail, or set up auto-pay from a linked checking account."
+  },
+  {
+    "intent": "autopay_1",
+    "category": "Payments",
+    "examples": [
+      "Enroll in autopay",
+      "Set up automatic payments",
+      "Schedule auto debit",
+      "Enable autopay",
+      "Turn on recurring payment",
+      "Set autopay",
+      "Turn on recurring payments",
+      "Awto-pay?"
+    ],
+    "response": "I’ve set up auto-pay for your minimum due each month from your linked checking account."
+  },
+  {
+    "intent": "card_activation_1",
+    "category": "Cards",
+    "examples": [
+      "Activate my card",
+      "New card activation",
+      "Turn on my card",
+      "Enable card usage",
+      "How to activate card?",
+      "Enable my card",
+      "Switch on my card",
+      "Activat card?"
+    ],
+    "response": "Your card ending in 5678 is now activated and ready for use."
+  },
+  {
+    "intent": "new_card_request_1",
+    "category": "Cards",
+    "examples": [
+      "I need a new card",
+      "Replace my lost card",
+      "Request replacement card",
+      "Stolen card, send new one",
+      "Order new debit card",
+      "Order a new card",
+      "Request replacement card",
+      "Replacment?"
+    ],
+    "response": "A replacement card has been ordered and will arrive in 5–7 business days."
+  },
+  {
+    "intent": "interest_rate_inquiry_1",
+    "category": "Rates & Fees",
+    "examples": [
+      "What’s my APR?",
+      "Interest rate on my card?",
+      "Current rate?",
+      "How much interest do I pay?",
+      "Rate details?",
+      "What interest am I paying?",
+      "Intsrt rate?"
+    ],
+    "response": "Your current APR is 16.49% variable."
+  },
+  {
+    "intent": "fees_inquiry_1",
+    "category": "Rates & Fees",
+    "examples": [
+      "What are your fees?",
+      "Monthly fee?",
+      "Annual fee?",
+      "Overlimit fee?",
+      "Late charge amount?",
+      "Tell me your fees",
+      "Feeses?"
+    ],
+    "response": "There’s no monthly fee. Late payment fee is up to $39."
+  },
+  {
+    "intent": "credit_limit_increase_1",
+    "category": "Credit Services",
+    "examples": [
+      "Increase my credit limit",
+      "Raise credit line",
+      "More credit, please",
+      "Limit boost",
+      "Request higher limit",
+      "Request credit line raise",
+      "Credit limt?"
+    ],
+    "response": "I’ve submitted your request. We’ll review your account and notify you within 2 business days."
+  },
+  {
+    "intent": "request_statement_1",
+    "category": "Account",
+    "examples": [
+      "Send me a statement",
+      "Email my last statement",
+      "Download statement",
+      "Get billing statement",
+      "Statement PDF please",
+      "Email me the statement",
+      "Statment?"
+    ],
+    "response": "Your last statement has been emailed to you. You can also download it from the mobile app."
+  },
+  {
+    "intent": "reward_balance_1",
+    "category": "Rewards",
+    "examples": [
+      "How many points do I have?",
+      "Reward balance?",
+      "Check my rewards",
+      "Points total?",
+      "Miles earned?",
+      "Points balance?",
+      "Rewards balanse?"
+    ],
+    "response": "You have 12,345 rewards points available."
+  },
+  {
+    "intent": "redeem_rewards_1",
+    "category": "Rewards",
+    "examples": [
+      "Redeem my points",
+      "Use my rewards",
+      "Cash out points",
+      "Book travel with points",
+      "Rewards options?",
+      "Cash in my points",
+      "Redeem rewords?"
+    ],
+    "response": "You can redeem points for statement credit, gift cards, or travel. Which would you like?"
+  },
+  {
+    "intent": "fraud_reporting_1",
+    "category": "Fraud & Security",
+    "examples": [
+      "Report fraud",
+      "Unauthorized charge",
+      "Someone stole my card",
+      "Fraudulent transaction",
+      "Card scam",
+      "Report unauthorized transaction",
+      "Frod?"
+    ],
+    "response": "I’m sorry to hear that. I’ve locked your card and escalated a dispute. A specialist will call you shortly."
+  },
+  {
+    "intent": "password_reset_1",
+    "category": "Technical Support",
+    "examples": [
+      "Reset my password",
+      "Forgot PIN",
+      "Change login password",
+      "Password recovery",
+      "Unlock my account",
+      "Change my password",
+      "Passwrd?"
+    ],
+    "response": "I’ve sent a password reset link to your registered email address."
+  },
+  {
+    "intent": "technical_issue_1",
+    "category": "Technical Support",
+    "examples": [
+      "App won’t load",
+      "Error message",
+      "Can’t login",
+      "Site down",
+      "Technical problem",
+      "There’s an error",
+      "Error messag?"
+    ],
+    "response": "We’re experiencing an outage. Please try again in a few minutes or contact support at 1-800-XXX-XXXX."
+  },
+  {
+    "intent": "branch_hours_1",
+    "category": "Locations & Hours",
+    "examples": [
+      "What time does branch open?",
+      "Branch hours",
+      "Store hours",
+      "When are you open?",
+      "Operating hours?",
+      "What are your office hours?",
+      "Branch ours?"
+    ],
+    "response": "Our branches are open Mon–Fri, 9 AM–5 PM, and Sat 9 AM–1 PM."
+  },
+  {
+    "intent": "atm_locator_1",
+    "category": "Locations & Hours",
+    "examples": [
+      "Find an ATM",
+      "ATM near me",
+      "Nearest machine",
+      "Locate cashpoint",
+      "Where’s an ATM?",
+      "Where’s the closest ATM?",
+      "A-T-M near me?"
+    ],
+    "response": "There’s an ATM at 123 Main St, 0.3 miles away, open 24/7."
+  },
+  {
+    "intent": "loan_application_1",
+    "category": "Loans",
+    "examples": [
+      "Apply for a loan",
+      "Loan options",
+      "Personal loan",
+      "How to get a loan",
+      "Loan requirements?",
+      "How do I apply for a loan?",
+      "Loan aplication?"
+    ],
+    "response": "You can apply online for a personal loan up to $50,000. Minimum credit score 660."
+  },
+  {
+    "intent": "loan_payment_1",
+    "category": "Loans",
+    "examples": [
+      "Pay my loan",
+      "Loan payment options",
+      "When is my loan due?",
+      "Loan payoff amount",
+      "Outstanding loan balance?",
+      "Pay off my loan",
+      "Loan paymant?"
+    ],
+    "response": "Your next loan payment of $350 is due on September 15, 2025. Pay online or by auto-debit."
+  },
+  {
+    "intent": "promotion_inquiry_1",
+    "category": "General",
+    "examples": [
+      "Any current promotions?",
+      "Deals available?",
+      "Sign-up bonus?",
+      "Referral offer?",
+      "New customer specials?",
+      "Any deals currently?",
+      "Promoshun?"
+    ],
+    "response": "Right now we’re offering $200 cash bonus after $1,000 spend in first 90 days."
+  },
+  {
+    "intent": "complaint_1",
+    "category": "Feedback",
+    "examples": [
+      "I want to file a complaint",
+      "Not happy with service",
+      "Speak to manager",
+      "I’m upset",
+      "Customer service issues",
+      "File a complaint",
+      "Complant?"
+    ],
+    "response": "I’m sorry for the trouble. I can escalate this to our resolution team—would you like me to do that?"
+  }
+]
