@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+  # Speech-to-Text Service (Required)
+  stt-service:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.stt
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator
+      - ../cache:/app/cache
+    environment:
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Kokoro TTS Service (Independent)
+  kokoro-tts:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.kokoro_tts
+    ports:
+      - "8011:8011"
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator
+      - ../kokoro-v1.0.onnx:/app/kokoro-v1.0.onnx
+      - ../voices-v1.0.bin:/app/voices-v1.0.bin
+      - ../cache:/app/cache
+    environment:
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - kokoro
+
+  # Hira Dia TTS Service (Independent, GPU required)
+  hira-dia-tts:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.hira_dia_tts
+    ports:
+      - "8012:8012"
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator
+      - ../cache:/app/cache
+    environment:
+      - PYTHONPATH=/app
+      - CUDA_VISIBLE_DEVICES=0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - hira-dia
+
+  # Mistral LLM Service (Independent)
+  mistral-llm:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.mistral_llm
+    ports:
+      - "8021:8021"
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator
+      - ../cache:/app/cache
+      - ../adapters:/app/adapters
+    environment:
+      - PYTHONPATH=/app
+      - CUDA_VISIBLE_DEVICES=0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8021/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - mistral
+
+  # GPT LLM Service (Independent, High GPU requirements)
+  gpt-llm:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.gpt_llm
+    ports:
+      - "8022:8022"
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator
+      - ../cache:/app/cache
+      - ../adapters:/app/adapters
+    environment:
+      - PYTHONPATH=/app
+      - CUDA_VISIBLE_DEVICES=0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8012/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 16G
+    profiles:
+      - gpt
+
+networks:
+  default:
+    driver: bridge
+
+# Usage Examples:
+# 
+# Start only STT + Kokoro TTS + Mistral LLM:
+# docker-compose -f docker-compose.independent.yml --profile kokoro --profile mistral up -d
+#
+# Start only STT + Hira Dia TTS + GPT LLM:
+# docker-compose -f docker-compose.independent.yml --profile hira-dia --profile gpt up -d
+#
+# Start everything:
+# docker-compose -f docker-compose.independent.yml --profile kokoro --profile hira-dia --profile mistral --profile gpt up -d
+#
+# Start only Kokoro TTS (requires STT):
+# docker-compose -f docker-compose.independent.yml --profile kokoro up -d
+#
+# Stop specific services:
+# docker-compose -f docker-compose.independent.yml --profile kokoro down
+#
+# View logs for specific service:
+# docker-compose -f docker-compose.independent.yml logs -f kokoro-tts

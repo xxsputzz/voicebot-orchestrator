@@ -1,0 +1,34 @@
+# Dockerfile for Kokoro TTS Service
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional packages for TTS
+RUN pip install fastapi uvicorn aiofiles
+
+# Copy application code
+COPY voicebot_orchestrator/ ./voicebot_orchestrator/
+COPY aws_microservices/tts_kokoro_service.py ./aws_microservices/
+
+# Copy model files
+COPY kokoro-v1.0.onnx ./
+COPY voices-v1.0.bin ./
+
+# Expose port
+EXPOSE 8011
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8011/health || exit 1
+
+# Run the Kokoro TTS service
+CMD ["python", "aws_microservices/tts_kokoro_service.py"]

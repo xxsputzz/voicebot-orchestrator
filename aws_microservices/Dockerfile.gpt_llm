@@ -1,0 +1,47 @@
+# Dockerfile for GPT LLM Service  
+FROM nvidia/cuda:11.8-devel-ubuntu20.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-pip \
+    python3.11-dev \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set python3.11 as default python
+RUN ln -s /usr/bin/python3.11 /usr/bin/python
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install additional packages for LLM and GPU support
+RUN pip install fastapi uvicorn torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Copy application code
+COPY voicebot_orchestrator/ ./voicebot_orchestrator/
+COPY aws_microservices/llm_gpt_service.py ./aws_microservices/
+
+# Copy adapters if available
+COPY adapters/ ./adapters/
+
+# Expose port
+EXPOSE 8022
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8022/health || exit 1
+
+# Set CUDA environment
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Run the GPT LLM service
+CMD ["python", "aws_microservices/llm_gpt_service.py"]

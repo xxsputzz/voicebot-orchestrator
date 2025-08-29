@@ -13,6 +13,9 @@ numpy>=1.24.0
 pandas>=2.0.0
 requests>=2.31.0
 
+# System monitoring for service management
+psutil>=5.9.0
+
 # For future sprints (commented out for Sprint 1 restrictions)
 # Speech-to-Text (STT)
 # openai-whisper>=20231117

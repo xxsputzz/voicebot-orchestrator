@@ -24,6 +24,14 @@ try:
 except ImportError:
     SPRINT5_AVAILABLE = False
 
+# Import TTS/LLM combination testing
+try:
+    from test_tts_llm_combinations import TTSLLMCombinationTester
+    from test_independent_combinations import IndependentServicesCombinationTester
+    COMBINATION_TESTING_AVAILABLE = True
+except ImportError:
+    COMBINATION_TESTING_AVAILABLE = False
+
 
 async def run_all_tests():
     """Run all test suites."""
@@ -44,6 +52,23 @@ async def run_all_tests():
         async def run_sprint5_async():
             return run_sprint5_validation()
         test_suites.append(("Sprint 5 (Semantic Cache & LoRA)", run_sprint5_async))
+    
+    # Add TTS/LLM combination tests if available
+    if COMBINATION_TESTING_AVAILABLE:
+        async def run_tts_llm_combinations():
+            tester = TTSLLMCombinationTester()
+            await tester.run_all_combinations()
+            # Return True if any successful tests
+            return any(r["success"] for r in tester.results)
+        
+        async def run_independent_combinations():
+            tester = IndependentServicesCombinationTester()
+            await tester.run_all_combinations()
+            # Return True if any successful tests
+            return any(r["success"] for r in tester.results)
+        
+        test_suites.append(("TTS/LLM Combinations (General)", run_tts_llm_combinations))
+        test_suites.append(("TTS/LLM Combinations (Independent Services)", run_independent_combinations))
     
     total_passed = 0
     total_failed = 0
@@ -100,7 +125,7 @@ def run_specific_tests():
     parser.add_argument(
         "suites",
         nargs="*",
-        choices=["session", "stt", "llm", "tts", "integration", "sprint5", "all"],
+        choices=["session", "stt", "llm", "tts", "integration", "sprint5", "combinations", "independent", "all"],
         default=["all"],
         help="Test suites to run (default: all)"
     )
@@ -124,6 +149,21 @@ def run_specific_tests():
         async def run_sprint5_async():
             return run_sprint5_validation()
         suite_map["sprint5"] = ("Sprint 5 (Semantic Cache & LoRA)", run_sprint5_async)
+    
+    # Add TTS/LLM combination tests if available
+    if COMBINATION_TESTING_AVAILABLE:
+        async def run_tts_llm_combinations():
+            tester = TTSLLMCombinationTester()
+            await tester.run_all_combinations()
+            return any(r["success"] for r in tester.results)
+        
+        async def run_independent_combinations():
+            tester = IndependentServicesCombinationTester()
+            await tester.run_all_combinations()
+            return any(r["success"] for r in tester.results)
+        
+        suite_map["combinations"] = ("TTS/LLM Combinations (General)", run_tts_llm_combinations)
+        suite_map["independent"] = ("TTS/LLM Combinations (Independent Services)", run_independent_combinations)
     
     async def run_selected():
         all_passed = True

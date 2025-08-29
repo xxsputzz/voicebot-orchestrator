@@ -1,0 +1,442 @@
+1
+#!/usr/bin/env python3
+"""
+Voicebot Orchestrator Launcher
+
+Main entry point for launching different components of the voicebot orchestration platform.
+Provides a unified interface for testing, services, and deployment.
+"""
+
+import asyncio
+import sys
+import os
+import subprocess
+from pathlib import Path
+from typing import Optional
+
+# Add project root to path
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+
+def print_banner():
+    """Print application banner."""
+    print("=" * 80)
+    print("🤖 VOICEBOT ORCHESTRATION PLATFORM LAUNCHER")
+    print("   Enterprise-Grade Banking Voice AI")
+    print("   Sprint 6 Complete | Independent Services Ready")
+    print("=" * 80)
+    print()
+
+def show_main_menu():
+    """Show the main menu."""
+    print("📋 MAIN MENU")
+    print("-" * 40)
+    print()
+    print("🔧 SERVICE MANAGEMENT:")
+    print("  1. Launch Enhanced Service Manager (Independent Services)")
+    print("  2. Check Service Status")
+    print()
+    print("🧪 TESTING SUITES:")
+    print("  3. Run All Tests")
+    print("  4. Run TTS/LLM Combination Tests")
+    print("  5. Run Independent Services Tests")
+    print("  6. Run Specific Test Suite")
+    print("  7. Test Menu (Batch Scripts)")
+    print()
+    print("🚀 DEMOS & EXAMPLES:")
+    print("  8. Run CLI Demo")
+    print("  9. Run Sprint 6 Demo")
+    print("  10. Voice Conversation Demo")
+    print()
+    print("📊 ANALYTICS & MONITORING:")
+    print("  11. Analytics Dashboard")
+    print("  12. Performance Report")
+    print("  13. Cache Statistics")
+    print()
+    print("🐳 DEPLOYMENT:")
+    print("  14. Docker Compose Setup")
+    print("  15. Kubernetes Instructions")
+    print("  16. Installation Guide")
+    print()
+    print("  0. Exit")
+    print()
+
+def launch_enhanced_service_manager():
+    """Launch the enhanced service manager."""
+    print("🚀 Launching Enhanced Service Manager...")
+    print("-" * 40)
+    print("This provides numbered menu for independent services:")
+    print("- Fast: Kokoro TTS + Mistral LLM")
+    print("- Balanced: Kokoro TTS + GPT LLM") 
+    print("- Efficient: Hira Dia TTS + Mistral LLM")
+    print("- Quality: Hira Dia TTS + GPT LLM")
+    print("- Individual service management")
+    print("- Comprehensive testing")
+    print()
+    
+    try:
+        script_path = project_root / "aws_microservices" / "enhanced_service_manager.py"
+        if script_path.exists():
+            subprocess.run([sys.executable, str(script_path)], cwd=project_root)
+        else:
+            print(f"❌ Enhanced service manager not found at: {script_path}")
+    except KeyboardInterrupt:
+        print("\n👋 Service manager closed by user")
+    except Exception as e:
+        print(f"❌ Error launching service manager: {e}")
+
+def launch_original_orchestrator():
+    """Launch the original FastAPI orchestrator."""
+    print("🚀 Launching Original Orchestrator (FastAPI)...")
+    print("-" * 40)
+    print("Starting FastAPI server on http://localhost:8000")
+    print("WebSocket endpoint: ws://localhost:8000/ws")
+    print()
+    
+    try:
+        script_path = project_root / "start_server.py"
+        if script_path.exists():
+            subprocess.run([sys.executable, str(script_path)], cwd=project_root)
+        else:
+            # Try alternative methods
+            subprocess.run([sys.executable, "-m", "voicebot_orchestrator.main"], cwd=project_root)
+    except KeyboardInterrupt:
+        print("\n👋 Orchestrator closed by user")
+    except Exception as e:
+        print(f"❌ Error launching orchestrator: {e}")
+        print("Alternative: Try running 'python start_server.py' or 'uvicorn voicebot_orchestrator.main:app'")
+
+def check_service_status():
+    """Check status of all services."""
+    print("🔍 Checking Service Status...")
+    print("-" * 40)
+    
+    services = {
+        "Main Orchestrator": "http://localhost:8000",
+        "Whisper STT": "http://localhost:8002", 
+        "Kokoro TTS": "http://localhost:8011",
+        "Hira Dia TTS": "http://localhost:8012",
+        "Mistral LLM": "http://localhost:8021",
+        "GPT LLM": "http://localhost:8022"
+    }
+    
+    try:
+        import requests
+        
+        for service_name, url in services.items():
+            try:
+                response = requests.get(f"{url}/health", timeout=3)
+                if response.status_code == 200:
+                    print(f"✅ {service_name}: Running ({url})")
+                else:
+                    print(f"⚠️ {service_name}: Unhealthy (Status: {response.status_code})")
+            except requests.exceptions.RequestException:
+                print(f"❌ {service_name}: Not running ({url})")
+    
+    except ImportError:
+        print("❌ requests library not available. Cannot check services.")
+        print("Install with: pip install requests")
+    
+    print()
+    print("To start services:")
+    print("  Option 1: Choose '1' from main menu (Enhanced Service Manager)")
+    print("  Option 2: Choose '2' from main menu (Original Orchestrator)")
+
+async def run_all_tests():
+    """Run all test suites."""
+    print("🧪 Running All Test Suites...")
+    print("-" * 40)
+    
+    try:
+        # Change to tests directory
+        tests_dir = project_root / "tests"
+        os.chdir(tests_dir)
+        
+        # Run the comprehensive test suite
+        subprocess.run([sys.executable, "run_tests.py", "all"], cwd=tests_dir)
+        
+    except Exception as e:
+        print(f"❌ Error running tests: {e}")
+
+async def run_combination_tests():
+    """Run TTS/LLM combination tests."""
+    print("🎭 Running TTS/LLM Combination Tests...")
+    print("-" * 40)
+    
+    try:
+        tests_dir = project_root / "tests"
+        
+        print("1. General TTS/LLM combinations")
+        print("2. Independent services combinations")
+        print("3. Both")
+        choice = input("\nSelect test type (1-3): ").strip()
+        
+        if choice == "1":
+            subprocess.run([sys.executable, "test_tts_llm_combinations.py"], cwd=tests_dir)
+        elif choice == "2":
+            subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
+        elif choice == "3":
+            subprocess.run([sys.executable, "test_tts_llm_combinations.py"], cwd=tests_dir)
+            subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
+        else:
+            print("❌ Invalid choice")
+    
+    except Exception as e:
+        print(f"❌ Error running combination tests: {e}")
+
+def run_specific_tests():
+    """Run specific test suites."""
+    print("🎯 Available Test Suites:")
+    print("-" * 40)
+    print("1. Session Manager Tests")
+    print("2. STT Tests") 
+    print("3. LLM Tests")
+    print("4. TTS Tests")
+    print("5. Integration Tests")
+    print("6. Sprint 5 Tests (LoRA & Cache)")
+    print("7. TTS/LLM Combinations (General)")
+    print("8. TTS/LLM Combinations (Independent)")
+    print()
+    
+    suite_map = {
+        "1": "session",
+        "2": "stt",
+        "3": "llm", 
+        "4": "tts",
+        "5": "integration",
+        "6": "sprint5",
+        "7": "combinations",
+        "8": "independent"
+    }
+    
+    choice = input("Select test suite (1-8): ").strip()
+    
+    if choice in suite_map:
+        try:
+            tests_dir = project_root / "tests"
+            subprocess.run([sys.executable, "run_tests.py", suite_map[choice]], cwd=tests_dir)
+        except Exception as e:
+            print(f"❌ Error running tests: {e}")
+    else:
+        print("❌ Invalid choice")
+
+def launch_test_menu():
+    """Launch the batch test menu."""
+    print("🎮 Launching Batch Test Menu...")
+    print("-" * 40)
+    
+    try:
+        tests_dir = project_root / "tests"
+        batch_script = tests_dir / "run_tts_llm_tests.bat"
+        
+        if batch_script.exists():
+            subprocess.run([str(batch_script)], cwd=tests_dir, shell=True)
+        else:
+            print(f"❌ Batch script not found: {batch_script}")
+    except Exception as e:
+        print(f"❌ Error launching test menu: {e}")
+
+def run_cli_demo():
+    """Run CLI demonstration."""
+    print("🎯 Running CLI Demo...")
+    print("-" * 40)
+    
+    try:
+        subprocess.run([sys.executable, "run_app.py", "cli"], cwd=project_root)
+    except Exception as e:
+        print(f"❌ Error running CLI demo: {e}")
+
+def run_sprint6_demo():
+    """Run Sprint 6 demonstration."""
+    print("🎯 Running Sprint 6 Demo...")
+    print("-" * 40)
+    
+    try:
+        demo_script = project_root / "demos" / "sprint6_demo.py"
+        if demo_script.exists():
+            subprocess.run([sys.executable, str(demo_script)], cwd=project_root)
+        else:
+            subprocess.run([sys.executable, "run_app.py", "demo"], cwd=project_root)
+    except Exception as e:
+        print(f"❌ Error running Sprint 6 demo: {e}")
+
+def run_voice_demo():
+    """Run voice conversation demo."""
+    print("🎙️ Running Voice Conversation Demo...")
+    print("-" * 40)
+    
+    demos_dir = project_root / "demos"
+    demo_files = [
+        "sprint5_complete_demo.py",
+        "production_conversation_demo.py", 
+        "voice_test.py"
+    ]
+    
+    for demo_file in demo_files:
+        demo_path = demos_dir / demo_file
+        if demo_path.exists():
+            try:
+                subprocess.run([sys.executable, str(demo_path)], cwd=project_root)
+                break
+            except Exception as e:
+                print(f"❌ Error running {demo_file}: {e}")
+                continue
+    else:
+        print("❌ No voice demo scripts found")
+
+def show_analytics():
+    """Show analytics dashboard."""
+    print("📊 Analytics Dashboard...")
+    print("-" * 40)
+    
+    try:
+        # Try Sprint 6 CLI
+        subprocess.run([
+            sys.executable, "-m", "voicebot_orchestrator.sprint6_cli", 
+            "analytics-report", "--type", "summary"
+        ], cwd=project_root)
+    except Exception as e:
+        print(f"❌ Error showing analytics: {e}")
+
+def show_performance_report():
+    """Show performance report."""
+    print("⚡ Performance Report...")
+    print("-" * 40)
+    
+    try:
+        subprocess.run([
+            sys.executable, "-m", "voicebot_orchestrator.sprint6_cli",
+            "orchestrator-health"
+        ], cwd=project_root)
+    except Exception as e:
+        print(f"❌ Error showing performance report: {e}")
+
+def show_cache_stats():
+    """Show cache statistics."""
+    print("🗃️ Cache Statistics...")
+    print("-" * 40)
+    
+    try:
+        subprocess.run([
+            sys.executable, "-m", "voicebot_orchestrator.sprint6_cli",
+            "cache-manager", "stats"
+        ], cwd=project_root)
+    except Exception as e:
+        print(f"❌ Error showing cache stats: {e}")
+
+def show_docker_setup():
+    """Show Docker Compose setup."""
+    print("🐳 Docker Compose Setup...")
+    print("-" * 40)
+    print()
+    print("Available Docker profiles:")
+    print("  docker-compose up                        # Basic services")
+    print("  docker-compose --profile monitoring up   # With Prometheus/Grafana")
+    print("  docker-compose --profile loadbalancer up # With NGINX load balancer")
+    print()
+    print("Service URLs (when running):")
+    print("  http://localhost:8000  # Main orchestrator")
+    print("  http://localhost:3000  # Grafana dashboard") 
+    print("  http://localhost:9090  # Prometheus metrics")
+    print()
+
+def show_kubernetes_instructions():
+    """Show Kubernetes deployment instructions."""
+    print("☸️ Kubernetes Deployment...")
+    print("-" * 40)
+    print()
+    print("Deploy to Kubernetes:")
+    print("  kubectl apply -f k8s/orchestrator-core.yaml")
+    print("  kubectl get pods -n voicebot-orchestrator")
+    print("  kubectl logs -f deployment/orchestrator-core")
+    print()
+    print("Scale deployment:")
+    print("  kubectl scale deployment orchestrator-core --replicas=3")
+    print()
+    print("Access services:")
+    print("  kubectl port-forward service/orchestrator-core 8000:8000")
+    print()
+
+def show_installation_guide():
+    """Show installation guide."""
+    print("📦 Installation Guide...")
+    print("-" * 40)
+    print()
+    print("Option 1: Package Installation")
+    print("  pip install voicebot-orchestrator")
+    print("  poetry install voicebot-orchestrator")
+    print()
+    print("Option 2: Development Setup")
+    print("  git clone <repository>")
+    print("  cd voicebot-orchestrator")
+    print("  pip install -r requirements.txt")
+    print("  python launcher.py")
+    print()
+    print("Option 3: Docker")
+    print("  docker-compose up")
+    print()
+
+async def main():
+    """Main launcher function."""
+    print_banner()
+    
+    while True:
+        show_main_menu()
+        
+        try:
+            choice = input("Enter your choice (0-16): ").strip()
+            
+            if choice == "0":
+                print("\n👋 Goodbye!")
+                break
+            elif choice == "1":
+                launch_enhanced_service_manager()
+            elif choice == "2":
+                check_service_status()
+            elif choice == "3":
+                await run_all_tests()
+            elif choice == "4":
+                await run_combination_tests()
+            elif choice == "5":
+                # Run independent services tests specifically
+                tests_dir = project_root / "tests"
+                subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
+            elif choice == "6":
+                run_specific_tests()
+            elif choice == "7":
+                launch_test_menu()
+            elif choice == "8":
+                run_cli_demo()
+            elif choice == "9":
+                run_sprint6_demo()
+            elif choice == "10":
+                run_voice_demo()
+            elif choice == "11":
+                show_analytics()
+            elif choice == "12":
+                show_performance_report()
+            elif choice == "13":
+                show_cache_stats()
+            elif choice == "14":
+                show_docker_setup()
+            elif choice == "15":
+                show_kubernetes_instructions()
+            elif choice == "16":
+                show_installation_guide()
+            else:
+                print("❌ Invalid choice. Please enter 0-16.")
+            
+            # Only pause for informational displays, not for actions that launch other programs
+            if choice in ["2", "14", "15", "16"]:  # Status checks and info displays
+                input("\nPress Enter to continue...")
+                print("\n" + "="*50 + "\n")
+                
+        except KeyboardInterrupt:
+            print("\n\n👋 Goodbye!")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            input("\nPress Enter to continue...")
+
+if __name__ == "__main__":
+    asyncio.run(main())

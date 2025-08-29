@@ -1,0 +1,123 @@
+# Local Development Docker Compose
+# Runs all microservices on one machine for development and testing
+
+version: '3.8'
+
+services:
+  # STT Service (CPU-only, lightweight)
+  stt-service:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.stt
+    ports:
+      - "8001:8001"
+    environment:
+      - SERVICE_PORT=8001
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=local
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator:ro
+      - ../aws_microservices/stt_service.py:/app/stt_service.py:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - voicebot-network
+
+  # LLM Service (GPU-enabled if available)
+  llm-service:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.llm
+    ports:
+      - "8002:8002"
+    environment:
+      - SERVICE_PORT=8002
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=local
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator:ro
+      - ../aws_microservices/llm_service.py:/app/llm_service.py:ro
+      - ../adapters:/app/adapters:ro
+      - ../cache:/app/cache
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - voicebot-network
+
+  # TTS Service (GPU-enabled if available)
+  tts-service:
+    build:
+      context: ..
+      dockerfile: aws_microservices/Dockerfile.tts
+    ports:
+      - "8003:8003"
+    environment:
+      - SERVICE_PORT=8003
+      - LOG_LEVEL=INFO
+      - ENVIRONMENT=local
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - ../voicebot_orchestrator:/app/voicebot_orchestrator:ro
+      - ../aws_microservices/tts_service.py:/app/tts_service.py:ro
+      - ../kokoro-v1.0.onnx:/app/kokoro-v1.0.onnx:ro
+      - ../voices-v1.0.bin:/app/voices-v1.0.bin:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - voicebot-network
+
+  # Orchestrator Web Interface (Optional)
+  orchestrator-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - STT_SERVICE_URL=http://stt-service:8001
+      - LLM_SERVICE_URL=http://llm-service:8002
+      - TTS_SERVICE_URL=http://tts-service:8003
+    depends_on:
+      - stt-service
+      - llm-service
+      - tts-service
+    networks:
+      - voicebot-network
+
+networks:
+  voicebot-network:
+    driver: bridge
+
+volumes:
+  cache_data:
+  model_data:

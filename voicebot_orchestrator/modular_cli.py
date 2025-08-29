@@ -295,8 +295,6 @@ class EnhancedVoicebotCLI:
                     print("❌ Invalid choice")
             except Exception as e:
                 print(f"❌ Error: {e}")
-            
-            input("\n⏸️  Press Enter to continue...")
     
     async def handle_service_management(self):
         """Handle service management submenu"""
@@ -343,8 +341,6 @@ class EnhancedVoicebotCLI:
             except Exception as e:
                 print(f"❌ Error: {e}")
             
-            input("\n⏸️  Press Enter to continue...")
-            
     async def handle_service_shutdown(self):
         """Handle service shutdown submenu"""
         while True:
@@ -380,8 +376,6 @@ class EnhancedVoicebotCLI:
                     print("❌ Invalid choice")
             except Exception as e:
                 print(f"❌ Error: {e}")
-            
-            input("\n⏸️  Press Enter to continue...")
     
     async def handle_testing_demos(self):
         """Handle testing and demos submenu"""
@@ -614,8 +608,6 @@ class EnhancedVoicebotCLI:
                     await self.run_quick_test()
                 else:
                     print("❌ Invalid choice. Try 'help' for available commands.")
-                
-                input("\n⏸️  Press Enter to continue...")
                 
             except KeyboardInterrupt:
                 print("\n\n👋 Goodbye!")

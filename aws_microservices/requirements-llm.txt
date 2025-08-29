@@ -1,0 +1,18 @@
+# Requirements for LLM microservice (GPU-optimized)
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+torch==2.1.0 --index-url https://download.pytorch.org/whl/cu118
+transformers==4.35.2
+accelerate==0.25.0
+sentence-transformers==2.2.2
+numpy==1.24.3
+
+# For Ollama integration (if using Ollama models)
+ollama==0.1.7
+
+# LoRA adapters
+peft==0.7.1
+
+# Caching
+faiss-cpu==1.7.4

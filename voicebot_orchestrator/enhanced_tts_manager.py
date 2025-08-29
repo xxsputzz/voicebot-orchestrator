@@ -18,6 +18,17 @@ from enum import Enum
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'tests', 'dia'))
 
+def safe_print(text):
+    """Safe print function that handles Unicode encoding issues on Windows"""
+    try:
+        # First try to replace problematic Unicode characters
+        safe_text = text.replace('🎭', '[TTS]').replace('⏳', '[LOADING]').replace('1️⃣', '[1]').replace('2️⃣', '[2]').replace('✅', '[OK]').replace('❌', '[ERROR]')
+        print(safe_text)
+    except UnicodeEncodeError:
+        # Fallback: remove all non-ASCII characters
+        safe_text = text.encode('ascii', 'ignore').decode('ascii')
+        print(safe_text)
+
 # Import audio utilities
 try:
     from voicebot_orchestrator.audio_utils import audio_manager
@@ -47,17 +58,17 @@ class EnhancedTTSManager:
             TTSEngine.NARI_DIA: False
         }
         
-        print("🎭 Initializing Enhanced TTS Manager...")
-        print("   Supports: Kokoro (fast) + Nari Dia (quality)")
+        safe_print("🎭 Initializing Enhanced TTS Manager...")
+        safe_print("   Supports: Kokoro (fast) + Nari Dia (quality)")
     
     async def initialize_engines(self, load_kokoro=True, load_nari=True):
         """Initialize TTS engines based on requirements"""
-        print("⏳ Initializing TTS engines...")
+        safe_print("[LOADING] Initializing TTS engines...")
         start_time = time.time()
         
         # 1. Initialize Kokoro (fast engine)
         if load_kokoro:
-            print("\n1️⃣ Loading Kokoro TTS (Fast Engine)...")
+            safe_print("\n1. Loading Kokoro TTS (Fast Engine)...")
             try:
                 from voicebot_orchestrator.tts import KokoroTTS
                 
@@ -69,12 +80,12 @@ class EnhancedTTSManager:
                 kokoro_time = time.time() - kokoro_start
                 
                 self.engines_loaded[TTSEngine.KOKORO] = True
-                print(f"   ✅ Kokoro loaded and warmed up in {kokoro_time:.2f}s")
-                print(f"   🎤 Voice: af_bella (African female)")
-                print(f"   ⚡ Speed: ~0.8s average generation")
+                print(f"   >>> Kokoro loaded and warmed up in {kokoro_time:.2f}s")
+                print(f"   >>> Voice: af_bella (African female)")
+                print(f"   >>> Speed: ~0.8s average generation")
                 
             except Exception as e:
-                print(f"   ❌ Kokoro failed: {e}")
+                print(f"   XXX Kokoro failed: {e}")
                 self.engines_loaded[TTSEngine.KOKORO] = False
         
         # 2. Initialize Nari Dia (quality engine) 
@@ -112,7 +123,49 @@ class EnhancedTTSManager:
                 self.engines_loaded[TTSEngine.NARI_DIA] = False
                 
         elif load_nari:
-            print("\n2️⃣ Nari Dia requires CUDA - skipping")
+            safe_print("\n2️⃣ Loading Nari Dia-1.6B (Quality Engine)...")
+            try:
+                # Import Nari Dia if available  
+                start_nari = time.time()
+                
+                # Check for CUDA availability (required for Nari Dia)
+                if not torch.cuda.is_available():
+                    self.engines_loaded[TTSEngine.NARI_DIA] = False
+                    safe_print("   ❌ CUDA not available - Nari Dia requires GPU")
+                    return
+                
+                # Try importing Nari Dia
+                try:
+                    # Add dia path
+                    dia_path = Path(__file__).parent.parent / "tests" / "dia"
+                    if dia_path.exists():
+                        sys.path.insert(0, str(dia_path))
+                    
+                    from kokoro import Kokoro
+                    from seamless_communication.inference import Translator
+                    
+                    # Initialize Nari model (Dia-1.6B)
+                    self.nari_model = Translator(
+                        model_name_or_card="seamlessM4T_v2_large",
+                        vocoder_name_or_card="vocoder_v2",
+                        device=torch.device("cuda:0"),
+                        dtype=torch.float16,
+                    )
+                    
+                    self.engines_loaded[TTSEngine.NARI_DIA] = True
+                    load_time = time.time() - start_nari
+                    safe_print(f"   ✅ Nari Dia loaded in {load_time:.2f}s")
+                    
+                except ImportError as e:
+                    self.engines_loaded[TTSEngine.NARI_DIA] = False
+                    safe_print(f"   ❌ Nari Dia import failed: {e}")
+                    safe_print("   📦 Install: pip install seamless-communication")
+                    
+            except Exception as e:
+                self.engines_loaded[TTSEngine.NARI_DIA] = False
+                safe_print(f"❌ Nari Dia initialization failed: {e}")
+        else:
+            safe_print("\n2️⃣ Nari Dia requires CUDA - skipping")
             self.engines_loaded[TTSEngine.NARI_DIA] = False
         
         total_time = time.time() - start_time
@@ -123,12 +176,12 @@ class EnhancedTTSManager:
         elif self.engines_loaded[TTSEngine.NARI_DIA]:
             self.current_engine = TTSEngine.NARI_DIA
         else:
-            print("❌ No TTS engines loaded successfully!")
+            safe_print("❌ No TTS engines loaded successfully!")
             return False
         
-        print(f"\n🎉 TTS Manager initialized in {total_time:.2f}s")
-        print(f"🎯 Available engines: {self._get_available_engines()}")
-        print(f"🔧 Default engine: {self.current_engine.value}")
+        safe_print(f"\n🎉 TTS Manager initialized in {total_time:.2f}s")
+        safe_print(f"🎯 Available engines: {self._get_available_engines()}")
+        safe_print(f"🔧 Default engine: {self.current_engine.value}")
         return True
     
     def _get_available_engines(self):
@@ -152,19 +205,19 @@ class EnhancedTTSManager:
         old_engine = self.current_engine
         self.current_engine = engine
         
-        print(f"🔄 Switched TTS engine: {old_engine.value} → {engine.value}")
+        safe_print(f"🔄 Switched TTS engine: {old_engine.value} → {engine.value}")
         self._print_engine_info(engine)
     
     def _print_engine_info(self, engine: TTSEngine):
         """Print information about the specified engine"""
         if engine == TTSEngine.KOKORO:
-            print("   🚀 Kokoro TTS - Optimized for real-time conversation")
-            print("   ⚡ Speed: ~0.8s generation")
-            print("   🎤 Voice: af_bella (professional female)")
+            safe_print("   🚀 Kokoro TTS - Optimized for real-time conversation")
+            safe_print("   ⚡ Speed: ~0.8s generation")
+            safe_print("   🎤 Voice: af_bella (professional female)")
         elif engine == TTSEngine.NARI_DIA:
-            print("   🎭 Nari Dia-1.6B - Maximum quality dialogue")
-            print("   ⏳ Speed: ~3+ minutes generation") 
-            print("   🧠 Voice: Adaptive dialogue-focused")
+            safe_print("   🎭 Nari Dia-1.6B - Maximum quality dialogue")
+            safe_print("   ⏳ Speed: ~3+ minutes generation") 
+            safe_print("   🧠 Voice: Adaptive dialogue-focused")
     
     def get_current_engine(self) -> TTSEngine:
         """Get current active engine"""
@@ -267,12 +320,12 @@ class EnhancedTTSManager:
                 with open(output_path, 'rb') as f:
                     audio_bytes = f.read()
                 
-                print(f"💾 Saved to: {output_path}")
+                safe_print(f"💾 Saved to: {output_path}")
                 
                 # Calculate audio stats
                 duration = len(audio) / sample_rate
-                print(f"🎵 Audio duration: {duration:.1f}s")
-                print(f"⚡ Realtime factor: {generation_time/duration:.1f}x")
+                safe_print(f"🎵 Audio duration: {duration:.1f}s")
+                safe_print(f"⚡ Realtime factor: {generation_time/duration:.1f}x")
                 
                 return audio_bytes, generation_time, "Nari-Dia"
             
@@ -280,20 +333,20 @@ class EnhancedTTSManager:
                 raise RuntimeError(f"Engine {engine.value} not properly initialized")
                 
         except Exception as e:
-            print(f"❌ Generation failed with {engine.value}: {e}")
+            safe_print(f"❌ Generation failed with {engine.value}: {e}")
             
             # Try fallback to available engine
             available = [e for e, loaded in self.engines_loaded.items() if loaded and e != engine]
             if available:
                 fallback_engine = available[0]
-                print(f"🔄 Falling back to {fallback_engine.value}...")
+                safe_print(f"🔄 Falling back to {fallback_engine.value}...")
                 return await self.generate_speech(text, fallback_engine, save_path)
             else:
                 raise e
     
     def cleanup(self):
         """Clean up loaded models and free GPU memory"""
-        print("🧹 Cleaning up TTS engines...")
+        safe_print("🧹 Cleaning up TTS engines...")
         
         if self.nari_model:
             try:
@@ -302,27 +355,27 @@ class EnhancedTTSManager:
                     self.nari_model.to('cpu')
                 del self.nari_model
                 self.nari_model = None
-                print("✅ Nari Dia model moved to CPU and deleted")
+                safe_print("✅ Nari Dia model moved to CPU and deleted")
             except Exception as e:
-                print(f"⚠️ Nari Dia cleanup warning: {e}")
+                safe_print(f"⚠️ Nari Dia cleanup warning: {e}")
         
         if self.kokoro_tts:
             try:
                 # Clean up Kokoro TTS
                 del self.kokoro_tts
                 self.kokoro_tts = None
-                print("✅ Kokoro TTS deleted")
+                safe_print("✅ Kokoro TTS deleted")
             except Exception as e:
-                print(f"⚠️ Kokoro cleanup warning: {e}")
+                safe_print(f"⚠️ Kokoro cleanup warning: {e}")
         
         # Force GPU memory cleanup
         try:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
-                print("✅ GPU cache cleared and synchronized")
+                safe_print("✅ GPU cache cleared and synchronized")
         except Exception as e:
-            print(f"⚠️ GPU cleanup warning: {e}")
+            safe_print(f"⚠️ GPU cleanup warning: {e}")
         
         # Force garbage collection
         gc.collect()
@@ -334,15 +387,15 @@ class EnhancedTTSManager:
         }
         self.current_engine = TTSEngine.KOKORO
         
-        print("✅ TTS Manager cleanup complete")
+        safe_print("✅ TTS Manager cleanup complete")
 
 # CLI Helper Functions
 def get_engine_choice() -> TTSEngine:
     """Interactive engine selection for CLI"""
-    print("\n🎭 Select TTS Engine:")
-    print("1. 🚀 Kokoro (Fast, Real-time) - ~0.8s generation")
-    print("2. 🎭 Nari Dia (Quality, Slow) - ~3+ minutes generation")
-    print("3. 🤖 Auto (Smart selection based on context)")
+    safe_print("\n🎭 Select TTS Engine:")
+    safe_print("1. 🚀 Kokoro (Fast, Real-time) - ~0.8s generation")
+    safe_print("2. 🎭 Nari Dia (Quality, Slow) - ~3+ minutes generation")
+    safe_print("3. 🤖 Auto (Smart selection based on context)")
     
     while True:
         try:

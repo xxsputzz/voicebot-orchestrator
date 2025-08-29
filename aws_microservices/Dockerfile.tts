@@ -1,0 +1,44 @@
+# Docker configuration for TTS microservice (High-GPU)
+FROM nvidia/cuda:11.8-runtime-ubuntu20.04
+
+WORKDIR /app
+
+# Install Python and system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-pip \
+    git \
+    curl \
+    ffmpeg \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symlinks for python
+RUN ln -s /usr/bin/python3.11 /usr/bin/python
+RUN ln -s /usr/bin/pip3 /usr/bin/pip
+
+# Copy requirements and install Python dependencies
+COPY requirements-tts.txt .
+RUN pip install --no-cache-dir -r requirements-tts.txt
+
+# Copy application code
+COPY voicebot_orchestrator/ ./voicebot_orchestrator/
+COPY aws_microservices/tts_service.py .
+
+# Copy model files if they exist (will be downloaded if not)
+COPY kokoro-v1.0.onnx* ./
+COPY voices-v1.0.bin* ./
+
+# Create non-root user
+RUN useradd -m -u 1000 ttsuser && chown -R ttsuser:ttsuser /app
+USER ttsuser
+
+# Expose port
+EXPOSE 8003
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8003/health || exit 1
+
+# Run the service
+CMD ["python", "tts_service.py"]
