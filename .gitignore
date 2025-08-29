@@ -112,3 +112,6 @@ voices-v1.0.bin
 *.mp3
 tests/audio_samples/
 demos/audio_output/
+
+# Embedded repositories (should be added as submodules if needed)
+tests/dia/
