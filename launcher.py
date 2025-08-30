@@ -21,11 +21,11 @@ sys.path.insert(0, str(project_root))
 
 def print_banner():
     """Print application banner."""
-    print("=" * 80)
+    print("=" * 60)
     print("🤖 VOICEBOT ORCHESTRATION PLATFORM LAUNCHER")
     print("   Enterprise-Grade Banking Voice AI")
     print("   Sprint 6 Complete | Independent Services Ready")
-    print("=" * 80)
+    print("=" * 60)
     print()
 
 def show_main_menu():
@@ -65,8 +65,10 @@ def show_main_menu():
 
 def launch_enhanced_service_manager():
     """Launch the enhanced service manager."""
-    print("🚀 Launching Enhanced Service Manager...")
-    print("-" * 40)
+    print("=" * 60)
+    print("🎭 Enhanced Independent Microservices Manager")
+    print("=" * 60)
+    print()
     print("This provides numbered menu for independent services:")
     print("- Fast: Kokoro TTS + Mistral LLM")
     print("- Balanced: Kokoro TTS + GPT LLM") 
@@ -76,16 +78,11 @@ def launch_enhanced_service_manager():
     print("- Comprehensive testing")
     print()
     
-    try:
-        script_path = project_root / "aws_microservices" / "enhanced_service_manager.py"
-        if script_path.exists():
-            subprocess.run([sys.executable, str(script_path)], cwd=project_root)
-        else:
-            print(f"❌ Enhanced service manager not found at: {script_path}")
-    except KeyboardInterrupt:
-        print("\n👋 Service manager closed by user")
-    except Exception as e:
-        print(f"❌ Error launching service manager: {e}")
+    script_path = project_root / "aws_microservices" / "enhanced_service_manager.py"
+    if script_path.exists():
+        subprocess.run([sys.executable, str(script_path)], cwd=project_root)
+    else:
+        print(f"❌ Enhanced service manager not found at: {script_path}")
 
 def launch_original_orchestrator():
     """Launch the original FastAPI orchestrator."""
@@ -110,6 +107,7 @@ def launch_original_orchestrator():
 
 def check_service_status():
     """Check status of all services."""
+    print("-" * 40)
     print("🔍 Checking Service Status...")
     print("-" * 40)
     
@@ -163,62 +161,20 @@ async def run_all_tests():
 async def run_combination_tests():
     """Run TTS/LLM combination tests."""
     print("🎭 Running TTS/LLM Combination Tests...")
-    print("-" * 40)
+    print("=" * 40)
     
-    try:
-        tests_dir = project_root / "tests"
-        
-        print("1. General TTS/LLM combinations")
-        print("2. Independent services combinations")
-        print("3. Both")
-        choice = input("\nSelect test type (1-3): ").strip()
-        
-        if choice == "1":
-            subprocess.run([sys.executable, "test_tts_llm_combinations.py"], cwd=tests_dir)
-        elif choice == "2":
-            subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
-        elif choice == "3":
-            subprocess.run([sys.executable, "test_tts_llm_combinations.py"], cwd=tests_dir)
-            subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
-        else:
-            print("❌ Invalid choice")
-    
-    except Exception as e:
-        print(f"❌ Error running combination tests: {e}")
-
-def run_specific_tests():
-    """Run specific test suites."""
-    print("🎯 Available Test Suites:")
-    print("-" * 40)
-    print("1. Session Manager Tests")
-    print("2. STT Tests") 
-    print("3. LLM Tests")
-    print("4. TTS Tests")
-    print("5. Integration Tests")
-    print("6. Sprint 5 Tests (LoRA & Cache)")
-    print("7. TTS/LLM Combinations (General)")
-    print("8. TTS/LLM Combinations (Independent)")
-    print()
-    
-    suite_map = {
-        "1": "session",
-        "2": "stt",
-        "3": "llm", 
-        "4": "tts",
-        "5": "integration",
-        "6": "sprint5",
-        "7": "combinations",
-        "8": "independent"
-    }
-    
-    choice = input("Select test suite (1-8): ").strip()
-    
-    if choice in suite_map:
-        try:
-            tests_dir = project_root / "tests"
-            subprocess.run([sys.executable, "run_tests.py", suite_map[choice]], cwd=tests_dir)
-        except Exception as e:
-            print(f"❌ Error running tests: {e}")
+    tests_dir = project_root / "tests"
+    print("1. General TTS/LLM combinations")
+    print("2. Independent services combinations")
+    print("3. Both")
+    choice = input("\nSelect test type (1-3): ").strip()
+    if choice == "1":
+        subprocess.run([sys.executable, "test_tts_llm_combinations.py"], cwd=tests_dir)
+    elif choice == "2":
+        subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
+    elif choice == "3":
+        subprocess.run([sys.executable, "test_tts_llm_combinations.py"], cwd=tests_dir)
+        subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
     else:
         print("❌ Invalid choice")
 
@@ -436,8 +392,8 @@ async def main():
                 # Run independent services tests specifically
                 tests_dir = project_root / "tests"
                 subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
-            elif choice == "6":
-                run_specific_tests()
+            # elif choice == "6":
+            #     run_specific_tests()
             elif choice == "7":
                 launch_test_menu()
             elif choice == "8":

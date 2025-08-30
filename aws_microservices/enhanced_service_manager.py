@@ -670,7 +670,7 @@ class EnhancedServiceManager:
             except EOFError:
                 break
         
-        self.stop_all_services()
+    # Removed automatic stop of all services on exit. Services are only stopped when option 7 is selected.
     
     def show_main_menu(self):
         """Show the main menu following existing test patterns"""

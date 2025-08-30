@@ -17,8 +17,8 @@
     "epochs": 5,
     "learning_rate": 0.0002,
     "training_samples": 5,
-    "final_loss": 0.1019,
-    "perplexity": 2.86,
-    "convergence_epoch": 2
+    "final_loss": 0.3456,
+    "perplexity": 2.19,
+    "convergence_epoch": 1
   }
 }
