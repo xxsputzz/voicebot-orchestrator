@@ -474,4 +474,12 @@ async def main():
             input("\nPress Enter to continue...")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Goodbye!")
+    except asyncio.CancelledError:
+        print("\n👋 Goodbye!")
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        print("👋 Goodbye!")
