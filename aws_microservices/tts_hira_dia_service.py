@@ -53,7 +53,7 @@ class SynthesizeResponse(BaseModel):
 async def startup_event():
     """Initialize Hira Dia TTS service on startup"""
     global tts_service
-    logging.info("🎭 Initializing Hira Dia TTS Microservice...")
+    logging.info("[TTS] Initializing Hira Dia TTS Microservice...")
     
     try:
         # Check GPU availability (required for Hira Dia)
@@ -62,7 +62,7 @@ async def startup_event():
         
         gpu_name = torch.cuda.get_device_name(0)
         gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        logging.info(f"🎮 GPU available: {gpu_name} ({gpu_memory:.1f}GB)")
+        logging.info(f"[GPU] GPU available: {gpu_name} ({gpu_memory:.1f}GB)")
         
         # Initialize TTS manager with Hira Dia only
         tts_service = EnhancedTTSManager()
@@ -76,10 +76,10 @@ async def startup_event():
         # Force set to Nari Dia engine
         tts_service.set_engine(TTSEngine.NARI_DIA)
         
-        logging.info("✅ Hira Dia TTS Microservice ready!")
+        logging.info("[OK] Hira Dia TTS Microservice ready!")
         
     except Exception as e:
-        logging.error(f"❌ Hira Dia TTS initialization failed: {e}")
+        logging.error(f"[ERROR] Hira Dia TTS initialization failed: {e}")
         raise
 
 @app.on_event("shutdown")
@@ -176,7 +176,7 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
         
     except Exception as e:
         processing_time = time.time() - start_time
-        logging.error(f"❌ Hira Dia synthesis failed after {processing_time:.3f}s: {e}")
+        logging.error(f"[ERROR] Hira Dia synthesis failed after {processing_time:.3f}s: {e}")
         raise HTTPException(status_code=500, detail=f"Hira Dia synthesis failed: {str(e)}")
 
 @app.post("/synthesize_file")
@@ -210,7 +210,7 @@ async def synthesize_to_file(request: SynthesizeRequest):
         )
         
     except Exception as e:
-        logging.error(f"❌ Hira Dia file synthesis failed: {e}")
+        logging.error(f"[ERROR] Hira Dia file synthesis failed: {e}")
         raise HTTPException(status_code=500, detail=f"Hira Dia synthesis failed: {str(e)}")
 
 @app.get("/info")

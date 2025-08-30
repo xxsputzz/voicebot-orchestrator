@@ -6,7 +6,7 @@ import os
 import gc
 import torch
 import time
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'tests', 'dia'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'dia'))
 
 def test_nari_cuda():
     """Test Nari Dia with CUDA acceleration"""
@@ -28,6 +28,12 @@ def test_nari_cuda():
     
     print("\n📦 Loading Nari Dia model...")
     try:
+        # Debug: Show the path being added
+        dia_path = os.path.join(os.path.dirname(__file__), 'dia')
+        print(f"Adding path: {dia_path}")
+        print(f"Directory exists: {os.path.exists(dia_path)}")
+        print(f"Contents: {os.listdir(dia_path) if os.path.exists(dia_path) else 'Path not found'}")
+        
         # Import Nari Dia classes
         from dia.model import Dia
         import soundfile as sf

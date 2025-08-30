@@ -20,7 +20,7 @@ import time
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from voicebot_orchestrator.enhanced_tts_manager import EnhancedTTSManager, TTSEngine
+from voicebot_orchestrator.tts import KokoroTTS
 
 app = FastAPI(title="Kokoro TTS Microservice", version="1.0.0")
 
@@ -55,19 +55,10 @@ async def startup_event():
     logging.info("[TTS] Initializing Kokoro TTS Microservice...")
     
     try:
-        # Initialize TTS manager with Kokoro only
-        tts_service = EnhancedTTSManager()
+        # Initialize basic Kokoro TTS
+        tts_service = KokoroTTS(voice="af_bella")
         
-        # Initialize only Kokoro engine
-        await tts_service.initialize_engines(
-            load_kokoro=True,
-            load_nari=False  # Explicitly disable Nari
-        )
-        
-        # Force set to Kokoro engine
-        tts_service.set_engine(TTSEngine.KOKORO)
-        
-        logging.info("✅ Kokoro TTS Microservice ready!")
+        logging.info("[OK] Kokoro TTS Microservice ready!")
         
     except Exception as e:
         logging.error(f"[ERROR] Kokoro TTS initialization failed: {e}")
@@ -79,11 +70,11 @@ async def shutdown_event():
     global tts_service
     if tts_service:
         try:
-            tts_service.cleanup()
+            # Basic KokoroTTS doesn't need cleanup
             tts_service = None
-            logging.info("🛑 Kokoro TTS Microservice shutdown complete")
+            logging.info("[STOP] Kokoro TTS Microservice shutdown complete")
         except Exception as e:
-            logging.error(f"⚠️ Cleanup warning: {e}")
+            logging.error(f"[WARNING] Cleanup warning: {e}")
 
 @app.get("/health")
 async def health_check():
@@ -116,11 +107,9 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
         if len(request.text) > 5000:
             raise HTTPException(status_code=400, detail="Text too long (max 5000 characters)")
         
-        # Generate speech using Kokoro
-        audio_bytes, gen_time, used_engine = await tts_service.generate_speech(
-            text=request.text,
-            engine=TTSEngine.KOKORO  # Force Kokoro
-        )
+        # Generate speech using basic Kokoro TTS
+        audio_bytes = await tts_service.synthesize_speech(text=request.text)
+        gen_time = time.time() - start_time
         
         total_time = time.time() - start_time
         
@@ -159,12 +148,12 @@ async def synthesize_to_file(request: SynthesizeRequest):
     if not tts_service:
         raise HTTPException(status_code=503, detail="Kokoro TTS service not ready")
     
+    start_time = time.time()
+    
     try:
-        # Generate audio using Kokoro
-        audio_bytes, gen_time, used_engine = await tts_service.generate_speech(
-            text=request.text,
-            engine=TTSEngine.KOKORO
-        )
+        # Generate audio using basic Kokoro TTS
+        audio_bytes = await tts_service.synthesize_speech(text=request.text)
+        gen_time = time.time() - start_time
         
         # Return as audio file
         media_type = "audio/wav" if request.output_format == "wav" else "audio/mpeg"

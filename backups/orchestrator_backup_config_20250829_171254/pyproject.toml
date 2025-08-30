@@ -1,0 +1,169 @@
+[tool.poetry]
+name = "voicebot-orchestrator"
+version = "1.0.0"
+description = "Enterprise-grade voicebot orchestration platform with semantic caching, LoRA adapters, and microservices architecture"
+authors = ["Orkestra Team <team@orkestra.ai>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/orkestra/voicebot-orchestrator"
+repository = "https://github.com/orkestra/voicebot-orchestrator"
+documentation = "https://docs.orkestra.ai/voicebot-orchestrator"
+keywords = ["voicebot", "orchestration", "banking", "ai", "microservices"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Communications :: Telephony",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+packages = [
+    { include = "voicebot_orchestrator" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "^2.0.0"
+numpy = "^1.24.0"
+requests = "^2.31.0"
+fastapi = "^0.104.1"
+uvicorn = "^0.24.0"
+websockets = "^12.0"
+aiohttp = "^3.9.0"
+python-dotenv = "^1.0.0"
+prometheus-client = "^0.19.0"
+redis = "^5.0.0"
+pydantic = "^2.5.0"
+typer = "^0.9.0"
+rich = "^13.7.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+pytest-cov = "^4.1.0"
+black = "^23.11.0"
+isort = "^5.12.0"
+flake8 = "^6.1.0"
+mypy = "^1.7.0"
+pre-commit = "^3.6.0"
+
+[tool.poetry.group.optional.dependencies]
+# Optional dependencies for enhanced features
+torch = { version = "^2.1.0", optional = true }
+transformers = { version = "^4.35.0", optional = true }
+sentence-transformers = { version = "^2.2.0", optional = true }
+faiss-cpu = { version = "^1.7.0", optional = true }
+peft = { version = "^0.6.0", optional = true }
+openai-whisper = { version = "^20231117", optional = true }
+
+[tool.poetry.extras]
+ml = ["torch", "transformers", "sentence-transformers", "faiss-cpu", "peft"]
+stt = ["openai-whisper"]
+all = ["torch", "transformers", "sentence-transformers", "faiss-cpu", "peft", "openai-whisper"]
+
+[tool.poetry.scripts]
+# CLI entry points for the orchestrator
+orchestrator = "voicebot_orchestrator.sprint6_cli:main"
+voicebot-start = "voicebot_orchestrator.sprint6_cli:start_call_cmd"
+voicebot-monitor = "voicebot_orchestrator.sprint6_cli:monitor_session_cmd"
+voicebot-analytics = "voicebot_orchestrator.sprint6_cli:analytics_report_cmd"
+voicebot-cache = "voicebot_orchestrator.sprint6_cli:cache_manager_cmd"
+voicebot-adapters = "voicebot_orchestrator.sprint6_cli:adapter_control_cmd"
+voicebot-health = "voicebot_orchestrator.sprint6_cli:orchestrator_health_cmd"
+
+# Microservice entry points
+orchestrator-core = "voicebot_orchestrator.microservices.orchestrator_core:main"
+stt-service = "voicebot_orchestrator.microservices.stt_service:main"
+llm-service = "voicebot_orchestrator.microservices.llm_service:main"
+tts-service = "voicebot_orchestrator.microservices.tts_service:main"
+cache-service = "voicebot_orchestrator.microservices.cache_service:main"
+analytics-service = "voicebot_orchestrator.microservices.analytics_service:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+[tool.coverage.run]
+source = ["voicebot_orchestrator"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

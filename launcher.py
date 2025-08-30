@@ -1,4 +1,5 @@
 1
+0
 #!/usr/bin/env python3
 """
 Voicebot Orchestrator Launcher
@@ -29,8 +30,9 @@ def print_banner():
 
 def show_main_menu():
     """Show the main menu."""
+    print("=" * 60)
     print("📋 MAIN MENU")
-    print("-" * 40)
+    print("=" * 60)
     print()
     print("🔧 SERVICE MANAGEMENT:")
     print("  1. Launch Enhanced Service Manager (Independent Services)")
@@ -44,7 +46,7 @@ def show_main_menu():
     print("  7. Test Menu (Batch Scripts)")
     print()
     print("🚀 DEMOS & EXAMPLES:")
-    print("  8. Run CLI Demo")
+    print("  8. Enterprise CLI Demo (Production Validation)")
     print("  9. Run Sprint 6 Demo")
     print("  10. Voice Conversation Demo")
     print()
@@ -237,14 +239,33 @@ def launch_test_menu():
         print(f"❌ Error launching test menu: {e}")
 
 def run_cli_demo():
-    """Run CLI demonstration."""
-    print("🎯 Running CLI Demo...")
+    """Run Enterprise CLI demonstration with comprehensive validation."""
+    print("🚀 Running Enterprise CLI Demo...")
     print("-" * 40)
+    print("This runs comprehensive production validation of all enterprise features:")
+    print("✅ Session monitoring & analytics")
+    print("✅ System health & diagnostics")  
+    print("✅ Security & compliance auditing")
+    print("✅ Enterprise management features")
+    print("✅ Performance benchmarking")
+    print("✅ AWS deployment readiness")
+    print()
     
     try:
-        subprocess.run([sys.executable, "run_app.py", "cli"], cwd=project_root)
+        # Run the comprehensive enterprise CLI demo
+        demo_script = project_root / "demos" / "cli_enterprise_demo.py"
+        if demo_script.exists():
+            subprocess.run([sys.executable, str(demo_script)], cwd=project_root)
+        else:
+            print("❌ Enterprise CLI demo script not found")
+            print("Falling back to comparison demo...")
+            comparison_script = project_root / "demos" / "cli_demo_comparison.py"
+            if comparison_script.exists():
+                subprocess.run([sys.executable, str(comparison_script)], cwd=project_root)
+            else:
+                print("❌ No CLI demo scripts found")
     except Exception as e:
-        print(f"❌ Error running CLI demo: {e}")
+        print(f"❌ Error running Enterprise CLI demo: {e}")
 
 def run_sprint6_demo():
     """Run Sprint 6 demonstration."""
@@ -380,10 +401,24 @@ async def main():
     """Main launcher function."""
     print_banner()
     
+    # Clear any buffered input that might be contaminating stdin
+    import sys
+    if hasattr(sys.stdin, 'flush'):
+        sys.stdin.flush()
+    
     while True:
         show_main_menu()
         
         try:
+            # Clear any remaining input buffer before prompting
+            if sys.stdin.isatty():  # Only flush if running in a terminal
+                try:
+                    import msvcrt
+                    while msvcrt.kbhit():
+                        msvcrt.getch()
+                except ImportError:
+                    pass  # Not Windows or msvcrt not available
+            
             choice = input("Enter your choice (0-16): ").strip()
             
             if choice == "0":

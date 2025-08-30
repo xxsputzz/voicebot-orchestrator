@@ -173,6 +173,44 @@ class SessionManager:
             session_id for session_id, session in self._sessions.items()
             if session.state == SessionState.ACTIVE
         ]
+
+    async def get_session_status(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed session status and metrics.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Session status dictionary with metrics, None if not found
+        """
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if not session:
+                return None
+            
+            if self._is_expired(session):
+                session.state = SessionState.EXPIRED
+                return {
+                    "session_id": session_id,
+                    "status": "expired",
+                    "created_at": session.created_at,
+                    "last_activity": session.last_activity,
+                    "duration": time.time() - session.created_at,
+                    "message_count": len(session.conversation_history),
+                    "metadata": session.metadata
+                }
+            
+            return {
+                "session_id": session_id,
+                "status": session.state.value,
+                "created_at": session.created_at,
+                "last_activity": session.last_activity,
+                "duration": time.time() - session.created_at,
+                "message_count": len(session.conversation_history),
+                "metadata": session.metadata,
+                "conversation_preview": session.conversation_history[-3:] if session.conversation_history else []
+            }
     
     def _is_expired(self, session: SessionData) -> bool:
         """Check if session is expired."""

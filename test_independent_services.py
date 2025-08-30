@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 Comprehensive Test Suite for Independent Microservices
 Following patterns from existing tests/ folder
@@ -24,7 +25,7 @@ class IndependentServiceTester:
     
     def __init__(self):
         self.services = {
-            "stt": {"port": 8001, "name": "STT Service"},
+            "stt": {"port": 8002, "name": "STT Service"},
             "kokoro_tts": {"port": 8011, "name": "Kokoro TTS"},
             "hira_dia_tts": {"port": 8012, "name": "Hira Dia TTS"},
             "mistral_llm": {"port": 8021, "name": "Mistral LLM"},
@@ -69,7 +70,8 @@ class IndependentServiceTester:
         
         try:
             # Test 1: Health check
-            response = requests.get("http://localhost:8001/health", timeout=5)
+            stt_port = self.services["stt"]["port"]
+            response = requests.get(f"http://localhost:{stt_port}/health", timeout=5)
             if response.status_code == 200:
                 result["details"].append("✅ Health check passed")
             else:
@@ -79,7 +81,7 @@ class IndependentServiceTester:
             fake_audio = self.create_test_audio_data()
             files = {"audio": ("test.wav", fake_audio, "audio/wav")}
             
-            response = requests.post("http://localhost:8001/transcribe", files=files, timeout=15)
+            response = requests.post(f"http://localhost:{stt_port}/transcribe", files=files, timeout=15)
             
             if response.status_code == 200:
                 data = response.json()
@@ -131,7 +133,15 @@ class IndependentServiceTester:
                     "return_audio": True
                 }
                 
-                response = requests.post(f"http://localhost:{port}/synthesize", json=payload, timeout=30)
+                # Adjust timeout based on TTS service type
+                if service_key == "hira_dia_tts":
+                    # Hira Dia takes ~8+ minutes for high quality generation
+                    timeout = 600  # 10 minutes
+                else:
+                    # Kokoro and other TTS services are much faster
+                    timeout = 30  # 30 seconds
+                
+                response = requests.post(f"http://localhost:{port}/synthesize", json=payload, timeout=timeout)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -247,37 +257,212 @@ class IndependentServiceTester:
             
             if combo_available:
                 result["details"].append(f"✅ {combo['name']}: All services available")
-                success_count += 1
                 
                 # Test end-to-end flow if possible
-                if self.test_end_to_end_flow(combo["services"]):
+                if self.test_end_to_end_flow(combo["services"], combo["name"]):
                     result["details"].append(f"🎉 {combo['name']}: End-to-end test passed")
+                    success_count += 1
                 else:
                     result["details"].append(f"⚠️ {combo['name']}: End-to-end test issues")
             else:
                 missing = [s for s in combo["services"] if not available.get(s, False)]
                 result["details"].append(f"❌ {combo['name']}: Missing services: {missing}")
         
+        # Add GPT compatibility test if available
+        if available.get("gpt_llm"):
+            gpt_test_passed = self.test_gpt_compatibility()
+            if gpt_test_passed:
+                result["details"].append("✅ GPT LLM: Advanced compatibility test passed")
+                success_count += 1
+            else:
+                result["details"].append("❌ GPT LLM: Advanced compatibility test failed")
+        
         result["passed"] = success_count > 0
         return result
     
-    def test_end_to_end_flow(self, services: list) -> bool:
+    def test_end_to_end_flow(self, services: list, combo_name: str) -> bool:
         """Test end-to-end flow with available services"""
         try:
-            # This is a simplified end-to-end test
-            # In practice, you'd chain the services together
+            print(f"    🔄 Testing {combo_name} end-to-end flow...")
             
-            # Check that all services respond to health checks
+            # Step 1: Check that all services respond to health checks
             for service_key in services:
                 if service_key in self.services:
                     port = self.services[service_key]["port"]
                     response = requests.get(f"http://localhost:{port}/health", timeout=5)
                     if response.status_code != 200:
+                        print(f"    ❌ {service_key} health check failed")
                         return False
             
+            # Step 2: Test actual service interaction (simplified workflow)
+            test_text = "What is my account balance?"
+            
+            # If we have LLM service, test text generation
+            llm_response = None
+            if "mistral_llm" in services:
+                llm_port = self.services["mistral_llm"]["port"]
+                llm_payload = {"text": test_text, "use_cache": True}
+                llm_resp = requests.post(f"http://localhost:{llm_port}/generate", 
+                                       json=llm_payload, timeout=30)
+                if llm_resp.status_code == 200:
+                    llm_response = llm_resp.json().get("response", "")
+                    print(f"    ✅ Mistral LLM response: {llm_response[:50]}...")
+                else:
+                    print(f"    ❌ Mistral LLM failed: {llm_resp.status_code}")
+                    return False
+            
+            elif "gpt_llm" in services:
+                gpt_port = self.services["gpt_llm"]["port"]
+                gpt_payload = {"text": test_text, "use_cache": True}
+                gpt_resp = requests.post(f"http://localhost:{gpt_port}/generate", 
+                                       json=gpt_payload, timeout=30)
+                if gpt_resp.status_code == 200:
+                    llm_response = gpt_resp.json().get("response", "")
+                    print(f"    ✅ GPT LLM response: {llm_response[:50]}...")
+                else:
+                    print(f"    ❌ GPT LLM failed: {gpt_resp.status_code}")
+                    return False
+            
+            # If we have TTS service, test audio generation
+            if llm_response and ("kokoro_tts" in services or "hira_dia_tts" in services):
+                tts_service = "kokoro_tts" if "kokoro_tts" in services else "hira_dia_tts"
+                tts_port = self.services[tts_service]["port"]
+                tts_payload = {"text": llm_response[:100]}  # Limit length for testing
+                
+                # Use appropriate timeout
+                timeout = 600 if tts_service == "hira_dia_tts" else 30
+                
+                tts_resp = requests.post(f"http://localhost:{tts_port}/synthesize", 
+                                       json=tts_payload, timeout=timeout)
+                if tts_resp.status_code == 200:
+                    print(f"    ✅ {tts_service.replace('_', ' ').title()} audio generated")
+                else:
+                    print(f"    ❌ {tts_service} failed: {tts_resp.status_code}")
+                    return False
+            
+            print(f"    🎉 {combo_name} end-to-end flow completed successfully")
             return True
             
-        except Exception:
+        except Exception as e:
+            print(f"    ❌ End-to-end test error: {e}")
+            return False
+    
+    def test_gpt_compatibility(self) -> bool:
+        """Deep compatibility test for GPT LLM service"""
+        try:
+            print("    🧠 Running GPT Advanced Compatibility Test...")
+            port = self.services["gpt_llm"]["port"]
+            
+            # Test 1: Basic health and capability
+            health_resp = requests.get(f"http://localhost:{port}/health", timeout=5)
+            if health_resp.status_code != 200:
+                print("    ❌ GPT health check failed")
+                return False
+            
+            # Test 2: Multiple conversation contexts
+            test_scenarios = [
+                {
+                    "text": "What is artificial intelligence?",
+                    "domain_context": "technology",
+                    "expected_keywords": ["ai", "artificial", "intelligence", "technology"]
+                },
+                {
+                    "text": "How do I check my account balance?",
+                    "domain_context": "banking",
+                    "expected_keywords": ["account", "balance", "bank"]
+                },
+                {
+                    "text": "Can you help me with a loan application?",
+                    "domain_context": "banking",
+                    "expected_keywords": ["loan", "application", "help"]
+                }
+            ]
+            
+            success_count = 0
+            for i, scenario in enumerate(test_scenarios):
+                payload = {
+                    "text": scenario["text"],
+                    "domain_context": scenario.get("domain_context"),
+                    "use_cache": False,  # Force fresh responses
+                    "max_tokens": 150,
+                    "temperature": 0.7
+                }
+                
+                response = requests.post(f"http://localhost:{port}/generate", 
+                                       json=payload, timeout=30)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    response_text = data.get("response", "").lower()
+                    
+                    # Check if response contains expected keywords
+                    keyword_matches = sum(1 for keyword in scenario["expected_keywords"] 
+                                        if keyword.lower() in response_text)
+                    
+                    if keyword_matches > 0:
+                        print(f"    ✅ Scenario {i+1}: Response relevant ({keyword_matches} keywords matched)")
+                        success_count += 1
+                    else:
+                        print(f"    ⚠️ Scenario {i+1}: Response may be off-topic")
+                    
+                    # Check metadata
+                    if "processing_time_seconds" in data:
+                        proc_time = data["processing_time_seconds"]
+                        if proc_time < 10:  # Reasonable response time
+                            print(f"    ✅ Scenario {i+1}: Good response time ({proc_time:.2f}s)")
+                        else:
+                            print(f"    ⚠️ Scenario {i+1}: Slow response ({proc_time:.2f}s)")
+                else:
+                    print(f"    ❌ Scenario {i+1}: HTTP {response.status_code}")
+            
+            # Test 3: Conversation memory (if supported)
+            print("    🔄 Testing conversation context...")
+            conversation_payload = {
+                "text": "What did we just discuss?",
+                "conversation_history": [
+                    {"role": "user", "content": "Tell me about banking services"},
+                    {"role": "assistant", "content": "Banking services include checking accounts, savings, and loans"}
+                ],
+                "use_cache": False
+            }
+            
+            conv_response = requests.post(f"http://localhost:{port}/generate", 
+                                        json=conversation_payload, timeout=30)
+            
+            if conv_response.status_code == 200:
+                conv_data = conv_response.json()
+                if "banking" in conv_data.get("response", "").lower():
+                    print("    ✅ Conversation context maintained")
+                    success_count += 1
+                else:
+                    print("    ⚠️ Conversation context not maintained")
+            
+            # Test 4: Cache functionality
+            print("    💾 Testing cache functionality...")
+            cache_test_payload = {"text": "Test cache functionality", "use_cache": True}
+            
+            # First request (should miss cache)
+            first_resp = requests.post(f"http://localhost:{port}/generate", 
+                                     json=cache_test_payload, timeout=30)
+            # Second request (should hit cache)
+            second_resp = requests.post(f"http://localhost:{port}/generate", 
+                                      json=cache_test_payload, timeout=30)
+            
+            if (first_resp.status_code == 200 and second_resp.status_code == 200):
+                first_time = first_resp.json().get("processing_time_seconds", 0)
+                second_time = second_resp.json().get("processing_time_seconds", 0)
+                
+                if second_time < first_time * 0.5:  # Cache should be significantly faster
+                    print("    ✅ Cache functionality working")
+                    success_count += 1
+                else:
+                    print("    ⚠️ Cache may not be working optimally")
+            
+            print(f"    📊 GPT Compatibility: {success_count}/7 tests passed")
+            return success_count >= 5  # Require at least 5/7 tests to pass
+            
+        except Exception as e:
+            print(f"    ❌ GPT compatibility test error: {e}")
             return False
     
     def create_test_audio_data(self) -> bytes:

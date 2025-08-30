@@ -435,6 +435,168 @@ TTS MOS Score: {kpis['tts_mos_score']}/5.0
         
         return anomalies
 
+    def generate_summary_report(self, time_range: str = "24h") -> Dict[str, Any]:
+        """
+        Generate comprehensive summary report.
+        
+        Args:
+            time_range: Time range for report (24h, 7d, 30d)
+            
+        Returns:
+            Comprehensive summary report dictionary
+        """
+        # Parse time range
+        time_mapping = {
+            "1h": 1,
+            "6h": 6, 
+            "24h": 24,
+            "7d": 24 * 7,
+            "30d": 24 * 30
+        }
+        hours_back = time_mapping.get(time_range, 24)
+        
+        # Get basic KPIs
+        kpis = self.get_kpi_summary(hours_back)
+        
+        # Get performance metrics
+        performance = self.get_performance_metrics(hours_back)
+        
+        # Get anomaly detection
+        anomalies = self.detect_anomalies(hours_back)
+        
+        # Calculate additional insights
+        cutoff_time = datetime.now() - timedelta(hours=hours_back)
+        recent_sessions = [
+            s for s in self._session_data 
+            if datetime.fromisoformat(s["timestamp"]) >= cutoff_time
+        ]
+        
+        # Intent analysis
+        intent_distribution = {}
+        for session in recent_sessions:
+            intent = session.get("intent", "unknown")
+            intent_distribution[intent] = intent_distribution.get(intent, 0) + 1
+        
+        # Outcome analysis
+        outcome_distribution = {}
+        for session in recent_sessions:
+            outcome = session.get("outcome", "unknown")
+            outcome_distribution[outcome] = outcome_distribution.get(outcome, 0) + 1
+        
+        # Time-based analysis
+        hourly_sessions = {}
+        for session in recent_sessions:
+            hour = datetime.fromisoformat(session["timestamp"]).hour
+            hourly_sessions[hour] = hourly_sessions.get(hour, 0) + 1
+        
+        # Performance trends
+        sorted_sessions = sorted(recent_sessions, key=lambda x: x["timestamp"])
+        if len(sorted_sessions) >= 10:
+            # Calculate trend for last 10 vs previous 10 sessions
+            recent_10 = sorted_sessions[-10:]
+            previous_10 = sorted_sessions[-20:-10] if len(sorted_sessions) >= 20 else []
+            
+            recent_avg_latency = sum(s["total_latency"] for s in recent_10) / len(recent_10)
+            previous_avg_latency = sum(s["total_latency"] for s in previous_10) / len(previous_10) if previous_10 else recent_avg_latency
+            
+            latency_trend = "improving" if recent_avg_latency < previous_avg_latency else "degrading" if recent_avg_latency > previous_avg_latency else "stable"
+        else:
+            latency_trend = "insufficient_data"
+        
+        return {
+            "report_generated": datetime.now().isoformat(),
+            "time_range": time_range,
+            "hours_analyzed": hours_back,
+            "total_sessions_analyzed": len(recent_sessions),
+            
+            # Core KPIs
+            "kpis": kpis,
+            
+            # Performance metrics
+            "performance": performance,
+            
+            # Anomalies and alerts
+            "anomalies": anomalies,
+            "alert_count": len(anomalies),
+            
+            # Business insights
+            "insights": {
+                "intent_distribution": intent_distribution,
+                "outcome_distribution": outcome_distribution,
+                "hourly_distribution": hourly_sessions,
+                "performance_trend": latency_trend
+            },
+            
+            # Recommendations
+            "recommendations": self._generate_recommendations(kpis, performance, anomalies),
+            
+            # Health score (0-100)
+            "health_score": self._calculate_health_score(kpis, performance, anomalies)
+        }
+    
+    def _generate_recommendations(self, kpis: Dict, performance: Dict, anomalies: List) -> List[str]:
+        """Generate actionable recommendations based on analytics."""
+        recommendations = []
+        
+        # Performance recommendations
+        if performance.get("avg_total_latency", 0) > 2.0:
+            recommendations.append("Consider optimizing LLM inference time - average latency exceeds 2 seconds")
+        
+        if performance.get("cache_hit_rate", 0) < 60:
+            recommendations.append("Improve semantic cache performance - hit rate below 60%")
+        
+        # KPI recommendations
+        if kpis.get("avg_customer_satisfaction", 0) < 4.0:
+            recommendations.append("Focus on improving customer satisfaction - average rating below 4.0")
+        
+        if kpis.get("first_call_resolution_rate", 0) < 80:
+            recommendations.append("Enhance first call resolution - current rate below 80%")
+        
+        # Anomaly-based recommendations
+        for anomaly in anomalies:
+            if anomaly["type"] == "high_latency":
+                recommendations.append("Investigate system performance - high latency detected")
+            elif anomaly["type"] == "high_error_rate":
+                recommendations.append("Review error logs - elevated error rate detected")
+            elif anomaly["type"] == "low_cache_performance":
+                recommendations.append("Optimize caching strategy - performance below threshold")
+        
+        # Session volume recommendations
+        if kpis.get("total_sessions", 0) < 10:
+            recommendations.append("Consider increasing traffic routing - low session volume detected")
+        
+        return recommendations[:5]  # Limit to top 5 recommendations
+    
+    def _calculate_health_score(self, kpis: Dict, performance: Dict, anomalies: List) -> int:
+        """Calculate overall system health score (0-100)."""
+        score = 100
+        
+        # Deduct for performance issues
+        if performance.get("avg_total_latency", 0) > 3.0:
+            score -= 20
+        elif performance.get("avg_total_latency", 0) > 2.0:
+            score -= 10
+        
+        # Deduct for low cache performance
+        cache_hit_rate = performance.get("cache_hit_rate", 100)
+        if cache_hit_rate < 50:
+            score -= 15
+        elif cache_hit_rate < 70:
+            score -= 10
+        
+        # Deduct for anomalies
+        score -= len(anomalies) * 5
+        
+        # Deduct for low satisfaction
+        satisfaction = kpis.get("avg_customer_satisfaction", 5.0)
+        if satisfaction < 3.0:
+            score -= 20
+        elif satisfaction < 4.0:
+            score -= 10
+        
+        # Ensure score is within bounds
+        return max(0, min(100, score))
+
 
 # Global analytics engine instance
 analytics_engine = AnalyticsEngine()

@@ -350,3 +350,6 @@ def create_enhanced_llm(
         enable_cache=enable_cache,
         enable_adapters=enable_adapters
     )
+
+# Alias for backward compatibility
+EnhancedLLM = EnhancedMistralLLM

@@ -58,7 +58,7 @@ class EnhancedTTSManager:
             TTSEngine.NARI_DIA: False
         }
         
-        safe_print("🎭 Initializing Enhanced TTS Manager...")
+        safe_print("[TTS] Initializing Enhanced TTS Manager...")
         safe_print("   Supports: Kokoro (fast) + Nari Dia (quality)")
     
     async def initialize_engines(self, load_kokoro=True, load_nari=True):
@@ -90,8 +90,13 @@ class EnhancedTTSManager:
         
         # 2. Initialize Nari Dia (quality engine) 
         if load_nari and torch.cuda.is_available():
-            print("\n2️⃣ Loading Nari Dia-1.6B (Quality Engine)...")
+            print("\n[2] Loading Nari Dia-1.6B (Quality Engine)...")
             try:
+                # Add the correct path for dia module
+                dia_path = Path(__file__).parent.parent / "tests" / "dia"
+                if dia_path.exists():
+                    sys.path.insert(0, str(dia_path))
+                
                 from dia.model import Dia
                 
                 nari_start = time.time()
@@ -110,60 +115,17 @@ class EnhancedTTSManager:
                 nari_time = time.time() - nari_start
                 
                 self.engines_loaded[TTSEngine.NARI_DIA] = True
-                print(f"   ✅ Nari Dia loaded and warmed up in {nari_time:.2f}s")
+                print(f"   [OK] Nari Dia loaded and warmed up in {nari_time:.2f}s")
                 
                 memory_used = torch.cuda.memory_allocated(0) / 1024**3
-                print(f"   🎤 Voice: Dialogue-focused adaptive")
-                print(f"   🧠 Quality: Maximum naturalness")
-                print(f"   📊 GPU memory: {memory_used:.2f}GB")
-                print(f"   ⏳ Speed: ~3+ minutes generation")
+                print(f"   [MIC] Voice: Dialogue-focused adaptive")
+                print(f"   [BRAIN] Quality: Maximum naturalness")
+                print(f"   [CHART] GPU memory: {memory_used:.2f}GB")
+                print(f"   [TIMER] Speed: ~3+ minutes generation")
                 
             except Exception as e:
-                print(f"   ❌ Nari Dia failed: {e}")
+                print(f"   [ERROR] Nari Dia failed: {e}")
                 self.engines_loaded[TTSEngine.NARI_DIA] = False
-                
-        elif load_nari:
-            safe_print("\n2️⃣ Loading Nari Dia-1.6B (Quality Engine)...")
-            try:
-                # Import Nari Dia if available  
-                start_nari = time.time()
-                
-                # Check for CUDA availability (required for Nari Dia)
-                if not torch.cuda.is_available():
-                    self.engines_loaded[TTSEngine.NARI_DIA] = False
-                    safe_print("   ❌ CUDA not available - Nari Dia requires GPU")
-                    return
-                
-                # Try importing Nari Dia
-                try:
-                    # Add dia path
-                    dia_path = Path(__file__).parent.parent / "tests" / "dia"
-                    if dia_path.exists():
-                        sys.path.insert(0, str(dia_path))
-                    
-                    from kokoro import Kokoro
-                    from seamless_communication.inference import Translator
-                    
-                    # Initialize Nari model (Dia-1.6B)
-                    self.nari_model = Translator(
-                        model_name_or_card="seamlessM4T_v2_large",
-                        vocoder_name_or_card="vocoder_v2",
-                        device=torch.device("cuda:0"),
-                        dtype=torch.float16,
-                    )
-                    
-                    self.engines_loaded[TTSEngine.NARI_DIA] = True
-                    load_time = time.time() - start_nari
-                    safe_print(f"   ✅ Nari Dia loaded in {load_time:.2f}s")
-                    
-                except ImportError as e:
-                    self.engines_loaded[TTSEngine.NARI_DIA] = False
-                    safe_print(f"   ❌ Nari Dia import failed: {e}")
-                    safe_print("   📦 Install: pip install seamless-communication")
-                    
-            except Exception as e:
-                self.engines_loaded[TTSEngine.NARI_DIA] = False
-                safe_print(f"❌ Nari Dia initialization failed: {e}")
         else:
             safe_print("\n2️⃣ Nari Dia requires CUDA - skipping")
             self.engines_loaded[TTSEngine.NARI_DIA] = False

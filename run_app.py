@@ -54,41 +54,69 @@ def install_dependencies():
         return False
 
 def run_cli_demo():
-    """Run CLI demonstration."""
-    print("🚀 RUNNING CLI DEMONSTRATION")
+    """Run Enterprise CLI demonstration with comprehensive validation."""
+    print("🚀 RUNNING ENTERPRISE CLI DEMONSTRATION")
     print("-" * 40)
+    print("Comprehensive production validation of all enterprise features")
+    print()
     
-    commands = [
-        ("System Health Check", "python -m voicebot_orchestrator.sprint6_cli orchestrator-health"),
-        ("Cache Statistics", "python -m voicebot_orchestrator.sprint6_cli cache-manager stats"),
-        ("Start Demo Session", "python -m voicebot_orchestrator.sprint6_cli start-call demo-session --phone +1234567890 --domain banking"),
-        ("Monitor Session", "python -m voicebot_orchestrator.sprint6_cli monitor-session --session-id demo-session"),
-        ("Analytics Report", "python -m voicebot_orchestrator.sprint6_cli analytics-report --type summary --time-range 24h"),
-        ("Adapter Control", "python -m voicebot_orchestrator.sprint6_cli adapter-control list"),
-    ]
-    
-    for name, cmd in commands:
-        print(f"\n🔧 {name}")
-        print(f"Command: {cmd}")
-        print("-" * 40)
-        try:
-            result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30)
+    # Run the full enterprise CLI demo
+    try:
+        demo_script = Path("demos/cli_enterprise_demo.py")
+        if demo_script.exists():
+            print("🎯 Launching Enterprise CLI Demo with comprehensive validation...")
+            
+            # Set UTF-8 encoding for Windows
+            import os
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
+            
+            result = subprocess.run([sys.executable, str(demo_script)], 
+                                  capture_output=True, text=True, timeout=180, 
+                                  env=env, encoding='utf-8')
             if result.returncode == 0:
-                print("✅ Success!")
-                if result.stdout:
-                    # Show first few lines of output
-                    lines = result.stdout.strip().split('\n')
-                    for line in lines[:10]:  # Show first 10 lines
-                        if not line.startswith("Warning:"):
-                            print(f"   {line}")
-                    if len(lines) > 10:
-                        print(f"   ... ({len(lines)-10} more lines)")
+                print("✅ Enterprise CLI Demo completed successfully!")
+                print("\nDemo Summary:")
+                # Show key results from the output
+                lines = result.stdout.strip().split('\n')
+                for line in lines:
+                    if any(keyword in line for keyword in ["✅", "❌", "📊 OVERALL RESULTS", "🚀 PRODUCTION"]):
+                        print(f"   {line}")
             else:
-                print(f"❌ Failed: {result.stderr}")
-        except subprocess.TimeoutExpired:
-            print("⏰ Command timed out")
-        except Exception as e:
-            print(f"❌ Error: {e}")
+                print(f"❌ Demo failed: {result.stderr}")
+        else:
+            print("❌ Enterprise CLI demo not found, running individual commands...")
+            
+            # Fallback to individual commands
+            commands = [
+                ("System Health Check", "python -m voicebot_orchestrator.sprint6_cli orchestrator-health"),
+                ("System Diagnostics", "python -m voicebot_orchestrator.sprint6_cli system-diagnostics"),
+                ("Service Discovery", "python -m voicebot_orchestrator.sprint6_cli service-discovery"),
+                ("Security Audit", "python -m voicebot_orchestrator.sprint6_cli security-audit"),
+                ("Performance Benchmark", "python -m voicebot_orchestrator.sprint6_cli performance-benchmark"),
+                ("Analytics Report", "python -m voicebot_orchestrator.sprint6_cli analytics-report --type summary"),
+                ("Cache Statistics", "python -m voicebot_orchestrator.sprint6_cli cache-manager stats"),
+                ("Configuration Validation", "python -m voicebot_orchestrator.sprint6_cli config-validate"),
+            ]
+            
+            for name, cmd in commands:
+                print(f"\n🔧 {name}")
+                print(f"Command: {cmd}")
+                print("-" * 40)
+                try:
+                    result = subprocess.run(cmd.split(), capture_output=True, text=True, timeout=30)
+                    if result.returncode == 0:
+                        print("✅ PASSED")
+                    else:
+                        print("❌ FAILED")
+                except subprocess.TimeoutExpired:
+                    print("⏰ TIMEOUT")
+                except Exception as e:
+                    print(f"❌ ERROR: {e}")
+    
+    except Exception as e:
+        print(f"❌ Error running Enterprise CLI demo: {e}")
+        print("Try running: python demos/cli_enterprise_demo.py")
 
 def run_comprehensive_demo():
     """Run the comprehensive Sprint 6 demo."""
@@ -164,7 +192,7 @@ def main():
         mode = sys.argv[1].lower()
     else:
         print("Available modes:")
-        print("  python run_app.py cli          # Run CLI demonstration")
+        print("  python run_app.py cli          # Run Enterprise CLI Demo (Production Validation)")
         print("  python run_app.py demo         # Run comprehensive demo")
         print("  python run_app.py deploy       # Show deployment options")
         print("  python run_app.py install      # Install dependencies")

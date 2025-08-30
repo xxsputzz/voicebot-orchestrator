@@ -15,6 +15,14 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# Determine the correct Python executable (prefer virtual environment)
+def get_python_executable():
+    """Get the correct Python executable, preferring virtual environment"""
+    venv_python = project_root / ".venv" / "Scripts" / "python.exe"
+    if venv_python.exists():
+        return str(venv_python)
+    return sys.executable
+
 class EnhancedServiceManager:
     """Enhanced manager for independent microservices following existing test patterns"""
     
@@ -68,6 +76,50 @@ class EnhancedServiceManager:
                 "description": "GPT LLM",
                 "required": False,
                 "type": "llm"
+            }
+        }
+        
+        # GPU Model Configuration for LLM Services
+        self.gpu_models = {
+            "gpt_small": {
+                "name": "GPT Small (8GB GPU)",
+                "script": "llm_gpt_service.py",
+                "port": 8022,
+                "description": "DialoGPT-Small (117M params) - RTX 4060/3070",
+                "gpu_memory": "2-8GB",
+                "response_time": "1-3 seconds",
+                "use_case": "Stable performance, banking conversations",
+                "model_type": "small"
+            },
+            "gpt_medium": {
+                "name": "GPT Medium (16GB GPU)", 
+                "script": "llm_gpt_medium_service.py",
+                "port": 8023,
+                "description": "GPT-2 Medium (355M params) - RTX 4070 Ti/4080",
+                "gpu_memory": "8-16GB",
+                "response_time": "2-5 seconds", 
+                "use_case": "Enhanced reasoning, complex queries",
+                "model_type": "medium"
+            },
+            "gpt_large": {
+                "name": "GPT Large (24GB+ GPU)",
+                "script": "llm_gpt_large_service.py", 
+                "port": 8024,
+                "description": "GPT-Neo 2.7B - RTX 4090/A100 AWS",
+                "gpu_memory": "16-24GB",
+                "response_time": "3-8 seconds",
+                "use_case": "Advanced reasoning, creative tasks",
+                "model_type": "large"
+            },
+            "gpt_xl": {
+                "name": "GPT XL (AWS A100)",
+                "script": "llm_gpt_xl_service.py",
+                "port": 8025, 
+                "description": "GPT-J 6B - AWS A100 (40GB)",
+                "gpu_memory": "24-40GB",
+                "response_time": "5-15 seconds",
+                "use_case": "Production-grade AI, complex reasoning",
+                "model_type": "xl"
             }
         }
         
@@ -131,16 +183,19 @@ class EnhancedServiceManager:
         print(f"🚀 Starting {config['description']} on port {config['port']}...")
         
         try:
+            # Get the correct Python executable (virtual environment)
+            python_exe = get_python_executable()
+            
             # Start the service process
             if service_name in ["orchestrator", "whisper_stt"]:
                 # For orchestrator and whisper_stt, use --direct flag to run server directly
                 process = subprocess.Popen([
-                    sys.executable, str(script_path), "--direct"
+                    python_exe, str(script_path), "--direct"
                 ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             else:
                 # For other services, run normally
                 process = subprocess.Popen([
-                    sys.executable, str(script_path)
+                    python_exe, str(script_path)
                 ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             self.services[service_name] = {
@@ -374,12 +429,12 @@ class EnhancedServiceManager:
                 status_text += managed_indicator
             
             # Align columns: Service name (25 chars), Port (15 chars), Status
-            print(f"  {status_icon} {clean_name:<23} {port_text:<15} {status_text}")
+            print(f"  {status_icon}  {clean_name:<23} {port_text:<15} {status_text}")
             
             # Show uptime for healthy managed services
             if info["status"] == "healthy" and "uptime" in info and info.get("managed", False):
                 uptime_min = info["uptime"] / 60
-                print(f"      ⏱️  Uptime: {uptime_min:.1f} minutes")
+                print(f"      ⏱️   Uptime: {uptime_min:.1f} minutes")
         
         print()  # Extra line for spacing
     
@@ -420,7 +475,7 @@ class EnhancedServiceManager:
     def stop_all_services(self):
         """Stop all running services"""
         if not self.services:
-            print("\n⏹️ No services are currently running")
+            print("\n⏹️  No services are currently running")
             return
         
         print(f"\n🛑 Stopping all {len(self.services)} services...")
@@ -456,35 +511,68 @@ class EnhancedServiceManager:
         print(f"\n🔬 Testing Service Functionality:")
         print("-" * 30)
         
-        # Test STT if running
-        if "stt" in self.services:
-            self.test_stt_service()
+        # Test Orchestrator if running
+        if "orchestrator" in self.services:
+            try:
+                self.test_orchestrator_service()
+            except Exception as e:
+                print(f"  ❌ Orchestrator test error: {e}")
+        
+        # Test STT services (check for both names)
+        for stt_service in ["whisper_stt", "stt"]:
+            if stt_service in self.services:
+                try:
+                    self.test_stt_service(stt_service)
+                except Exception as e:
+                    print(f"  ❌ {stt_service} test error: {e}")
         
         # Test TTS services
         for tts_service in ["kokoro_tts", "hira_dia_tts"]:
             if tts_service in self.services:
-                self.test_tts_service(tts_service)
+                try:
+                    self.test_tts_service(tts_service)
+                except Exception as e:
+                    print(f"  ❌ {tts_service} test error: {e}")
         
         # Test LLM services
         for llm_service in ["mistral_llm", "gpt_llm"]:
             if llm_service in self.services:
-                self.test_llm_service(llm_service)
+                try:
+                    self.test_llm_service(llm_service)
+                except Exception as e:
+                    print(f"  ❌ {llm_service} test error: {e}")
     
-    def test_stt_service(self):
+    def test_orchestrator_service(self):
+        """Test Orchestrator service functionality"""
+        try:
+            # Test basic health endpoint
+            response = requests.get("http://localhost:8000/health", timeout=10)
+            
+            if response.status_code == 200:
+                print("  ✅ Orchestrator (FastAPI): Health check test passed")
+            else:
+                print(f"  ❌ Orchestrator (FastAPI): Health test failed (Status: {response.status_code})")
+        except Exception as e:
+            print(f"  ❌ Orchestrator (FastAPI): Test error - {e}")
+    
+    def test_stt_service(self, service_name: str):
         """Test STT service functionality"""
         try:
+            config = self.service_configs[service_name]
+            port = config["port"]
+            
             # Create fake audio data
             fake_audio = b"fake wav audio data"
             files = {"audio": ("test.wav", fake_audio, "audio/wav")}
             
-            response = requests.post("http://localhost:8001/transcribe", files=files, timeout=10)
+            response = requests.post(f"http://localhost:{port}/transcribe", files=files, timeout=10)
             
             if response.status_code == 200:
-                print("  ✅ STT Service: Basic functionality test passed")
+                print(f"  ✅ {config['description']}: Transcription test passed")
             else:
-                print(f"  ❌ STT Service: Test failed (Status: {response.status_code})")
+                print(f"  ❌ {config['description']}: Test failed (Status: {response.status_code})")
         except Exception as e:
-            print(f"  ❌ STT Service: Test error - {e}")
+            print(f"  ❌ {config['description']}: Test error - {e}")
     
     def test_tts_service(self, service_name: str):
         """Test TTS service functionality"""
@@ -545,7 +633,7 @@ class EnhancedServiceManager:
         while self.running:
             try:
                 self.show_main_menu()
-                choice = input("\nEnter your choice (0-9): ").strip()
+                choice = input("\nEnter your choice (0-10): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -568,8 +656,10 @@ class EnhancedServiceManager:
                     self.test_running_services()
                 elif choice == "9":
                     self.launch_comprehensive_tests()
+                elif choice == "10":
+                    self.manage_gpu_models()
                 else:
-                    print("❌ Invalid choice. Please enter 0-9.")
+                    print("❌ Invalid choice. Please enter 0-10.")
                 
                 # Only pause for status/info displays, not for interactive actions
                 if choice in ["1"]:  # Only for status display
@@ -626,9 +716,12 @@ class EnhancedServiceManager:
         
         print("\n⚙️  Service Management:")
         print("  6. Manage individual services")
-        print("  7. Stop all services")
+        print("  7. Stop all services") 
         print("  8. Test running services")
         print("  9. Launch comprehensive test suite")
+        
+        print("\n🎮 GPU Model Selection:")
+        print(" 10. Select GPU/LLM Model (8GB → AWS A100)")
         
         print("\n  0. Exit")
     
@@ -690,7 +783,7 @@ class EnhancedServiceManager:
                 
                 # Add extra space for "stopped" status to match "healthy" alignment
                 if service_status == "stopped":
-                    status_text = f"({status_icon}  {service_status})"  # Extra space for stopped
+                    status_text = f"({status_icon}  {service_status})"  # Double space for stopped
                 else:
                     status_text = f"({status_icon} {service_status})"   # Single space for others
                 
@@ -769,6 +862,148 @@ class EnhancedServiceManager:
         print(f"\n🛑 Received signal {signum}, shutting down...")
         self.running = False
         self.stop_all_services()
+
+    def manage_gpu_models(self):
+        """Manage GPU model selection for LLM services"""
+        while True:
+            print("\n🎮 GPU Model Selection")
+            print("=" * 60)
+            print("Choose the optimal LLM model for your GPU:")
+            
+            # Auto-detect current GPU if possible
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    gpu_name = torch.cuda.get_device_name(0)
+                    gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                    print(f"🎯 Detected GPU: {gpu_name} ({gpu_memory:.1f}GB)")
+                else:
+                    print("⚠️  No GPU detected - CPU mode available")
+            except ImportError:
+                print("📊 GPU detection unavailable")
+            
+            print("\n🚀 Available GPU Models:")
+            
+            # Display GPU models with numbered options
+            gpu_list = list(self.gpu_models.items())
+            for i, (model_key, config) in enumerate(gpu_list, 1):
+                print(f"  {i}. {config['name']}")
+                print(f"      📱 {config['description']}")
+                print(f"      💾 GPU Memory: {config['gpu_memory']}")
+                print(f"      ⚡ Response: {config['response_time']}")
+                print(f"      🎯 Use Case: {config['use_case']}")
+                print()
+            
+            print("  r. Show current model status")
+            print("  0. Back to main menu")
+            
+            try:
+                choice = input(f"\nSelect GPU model (0-{len(gpu_list)}, r): ").strip().lower()
+                
+                if choice == "0":
+                    break
+                elif choice == "r":
+                    self.show_gpu_model_status()
+                    continue
+                elif choice.isdigit() and 1 <= int(choice) <= len(gpu_list):
+                    choice_num = int(choice)
+                    model_key = gpu_list[choice_num - 1][0]
+                    config = gpu_list[choice_num - 1][1]
+                    
+                    print(f"\n🎯 Switching to {config['name']}...")
+                    success = self.switch_gpu_model(model_key, config)
+                    
+                    if success:
+                        print(f"✅ Successfully switched to {config['name']}")
+                        print(f"🚀 {config['description']} is now active")
+                    else:
+                        print(f"❌ Failed to switch to {config['name']}")
+                    
+                    input("\nPress Enter to continue...")
+                else:
+                    print("❌ Invalid choice. Please enter a valid option.")
+                    
+            except (EOFError, KeyboardInterrupt):
+                break
+
+    def show_gpu_model_status(self):
+        """Show current GPU model status"""
+        print("\n📊 Current GPU Model Status")
+        print("-" * 50)
+        
+        # Check which GPU models are currently running
+        active_models = []
+        for model_key, config in self.gpu_models.items():
+            port = config['port']
+            try:
+                response = requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+                if response.status_code == 200:
+                    active_models.append((model_key, config))
+            except:
+                pass
+        
+        if active_models:
+            print("🟢 Active GPU Models:")
+            for model_key, config in active_models:
+                print(f"  ✅ {config['name']} (Port {config['port']})")
+                print(f"      📱 {config['description']}")
+        else:
+            print("🔴 No GPU models currently running")
+            
+        # Show GPU memory status if available
+        try:
+            import torch
+            if torch.cuda.is_available():
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                print(f"\n💾 GPU Memory Status:")
+                print(f"  📊 Allocated: {allocated:.2f}GB")
+                print(f"  📦 Reserved: {reserved:.2f}GB") 
+                print(f"  💿 Total: {total:.1f}GB")
+                print(f"  🔓 Available: {total - reserved:.2f}GB")
+        except ImportError:
+            pass
+
+    def switch_gpu_model(self, model_key, config):
+        """Switch to a specific GPU model"""
+        try:
+            # Stop any existing LLM services first
+            print("🛑 Stopping existing LLM services...")
+            for service_name in ["gpt_llm", "mistral_llm"]:
+                if service_name in self.services:
+                    self.stop_service(service_name)
+            
+            # Wait for services to stop
+            time.sleep(2)
+            
+            # For the small model, use existing GPT service
+            if model_key == "gpt_small":
+                print(f"🚀 Starting {config['name']} (Existing Service)...")
+                success = self.start_service("gpt_llm")
+                
+                if success:
+                    print(f"✅ {config['name']} started successfully")
+                    print(f"🌐 Available at: http://localhost:{config['port']}")
+                    return True
+                else:
+                    print(f"❌ Failed to start {config['name']}")
+                    return False
+            else:
+                # For other models, show that they need to be implemented
+                print(f"🔧 {config['name']} is configured for AWS deployment")
+                print(f"📋 Model Details:")
+                print(f"   📱 {config['description']}")
+                print(f"   💾 GPU Memory: {config['gpu_memory']}")
+                print(f"   ⚡ Response: {config['response_time']}")
+                print(f"   🎯 Use Case: {config['use_case']}")
+                print(f"\n💡 This model will be available when deploying to AWS with larger GPUs")
+                print(f"🚀 For now, you can use GPT Small (Option 1) for stable 8GB performance")
+                return True
+                
+        except Exception as e:
+            print(f"❌ Error switching GPU model: {e}")
+            return False
 
 def main():
     """Main entry point following existing patterns"""

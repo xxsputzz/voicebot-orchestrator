@@ -1,0 +1,47 @@
+# Dependencies for Voicebot Orchestrator Sprint 1
+
+# Core FastAPI and WebSocket support
+fastapi>=0.104.0
+websockets>=11.0.0
+uvicorn>=0.24.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Audio processing and ML
+numpy>=1.24.0
+pandas>=2.0.0
+requests>=2.31.0
+
+# System monitoring for service management
+psutil>=5.9.0
+
+# For future sprints (commented out for Sprint 1 restrictions)
+# Speech-to-Text (STT)
+# openai-whisper>=20231117
+# torch>=2.1.0
+# torchaudio>=2.1.0
+# transformers>=4.35.0
+# ffmpeg-python>=0.2.0
+
+# Large Language Model (LLM)  
+# mistralai>=0.0.8
+# langchain-mistralai>=0.0.1
+
+# Text-to-Speech (TTS)
+# kokoro>=0.1.0
+# espeak-ng>=1.51
+
+# CLI tooling
+# typer>=0.9.0
+# click>=8.1.0
+# rich>=13.0.0
+
+# Testing
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+
+# Development tools
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.6.0
