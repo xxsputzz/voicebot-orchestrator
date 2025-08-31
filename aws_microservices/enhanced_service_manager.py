@@ -32,6 +32,7 @@ class EnhancedServiceManager:
         self._status_cache = {}
         self._status_cache_time = {}
         self._cache_duration = 30  # Cache for 30 seconds (increased from 10)
+        self.intended_engine_mode = {}  # Track intended engine modes for services
         
         # Service configurations matching existing patterns
         self.service_configs = {
@@ -59,7 +60,16 @@ class EnhancedServiceManager:
             "hira_dia_tts": {
                 "script": "tts_hira_dia_service.py",
                 "port": 8012, 
-                "description": "Hira Dia TTS (High Quality)",
+                "description": "Unified Hira Dia TTS (Quality + Speed)",
+                "required": False,
+                "type": "tts",
+                "engine_modes": ["full", "4bit", "auto"],
+                "current_engine": "auto"  # Default engine preference
+            },
+            "dia_4bit_tts": {
+                "script": "tts_dia_4bit_service.py",
+                "port": 8013,
+                "description": "Dedicated Dia 4-bit TTS (Speed Only)",
                 "required": False,
                 "type": "tts"
             },
@@ -127,25 +137,25 @@ class EnhancedServiceManager:
         self.combinations = {
             "fast": {
                 "name": "Fast Combo",
-                "description": "Orchestrator + Whisper STT + Kokoro TTS + Mistral LLM (Real-time)",
+                "description": "Orchestrator + Whisper STT + Mistral LLM + Kokoro TTS (Real-time)",
                 "services": ["orchestrator", "whisper_stt", "kokoro_tts", "mistral_llm"],
                 "use_case": "Real-time conversation, quick responses with Whisper accuracy"
             },
             "balanced": {
                 "name": "Balanced Combo",
-                "description": "Orchestrator + Whisper STT + Kokoro TTS + GPT LLM (Fast TTS, advanced reasoning)",
+                "description": "Orchestrator + Whisper STT + GPT LLM + Kokoro TTS (Fast TTS, advanced reasoning)",
                 "services": ["orchestrator", "whisper_stt", "kokoro_tts", "gpt_llm"],
                 "use_case": "Quick TTS with advanced language processing and Whisper accuracy"
             },
             "efficient": {
                 "name": "Efficient Combo",
-                "description": "Orchestrator + Whisper STT + Hira Dia TTS + Mistral LLM (Quality TTS, efficient LLM)",
-                "services": ["orchestrator", "whisper_stt", "hira_dia_tts", "mistral_llm"],
-                "use_case": "Quality output with reasonable processing time and Whisper accuracy"
+                "description": "Orchestrator + Whisper STT + Mistral LLM + Dia 4-bit TTS (Speed optimized)",
+                "services": ["orchestrator", "whisper_stt", "dia_4bit_tts", "mistral_llm"],
+                "use_case": "Fast processing with dedicated 4-bit TTS for quick responses and Whisper accuracy"
             },
             "quality": {
                 "name": "Quality Combo",
-                "description": "Orchestrator + Whisper STT + Hira Dia TTS + GPT LLM (Maximum quality)",
+                "description": "Orchestrator + Whisper STT + GPT LLM + Hira Dia TTS (Maximum quality)",
                 "services": ["orchestrator", "whisper_stt", "hira_dia_tts", "gpt_llm"],
                 "use_case": "High-quality content, professional presentations with Whisper accuracy"
             }
@@ -268,6 +278,9 @@ class EnhancedServiceManager:
                     print(f"⚡ {service_name} force killed")
                 
                 del self.services[service_name]
+                # Clean up tracking for intended engine mode
+                if service_name in self.intended_engine_mode:
+                    del self.intended_engine_mode[service_name]
                 # Invalidate cache since service status changed
                 self.invalidate_cache(service_name)
                 return True
@@ -293,6 +306,9 @@ class EnhancedServiceManager:
                                 proc.terminate()
                                 proc.wait(timeout=5)
                                 print(f"✅ Independent {service_name} stopped")
+                                # Clean up tracking for intended engine mode
+                                if service_name in self.intended_engine_mode:
+                                    del self.intended_engine_mode[service_name]
                                 # Invalidate cache since service status changed
                                 self.invalidate_cache(service_name)
                                 return True
@@ -309,6 +325,103 @@ class EnhancedServiceManager:
             except Exception as e:
                 print(f"❌ Failed to stop independent service: {e}")
                 return False
+    
+    def start_dia_4bit_service(self) -> bool:
+        """Start Hira Dia TTS service directly in Dia 4-bit mode"""
+        service_name = "hira_dia_tts"
+        
+        if service_name not in self.service_configs:
+            print(f"❌ Unknown service: {service_name}")
+            return False
+        
+        # Check if already running
+        config = self.service_configs[service_name]
+        if self.check_service_health(service_name, timeout=1, use_cache=False):
+            print(f"✅ {config['description']} is already running")
+            return True
+        
+        if service_name in self.services:
+            print(f"✅ Service {service_name} already managed by this process")
+            return True
+        
+        # Get script path
+        script_path = Path(__file__).parent / config["script"]
+        
+        if not script_path.exists():
+            print(f"❌ Service script not found: {script_path}")
+            return False
+        
+        print(f"🚀 Starting {config['description']} in Dia 4-bit mode on port {config['port']}...")
+        print("   Engine: Dia 4-bit (speed optimized)")
+        
+        try:
+            # Get the correct Python executable
+            python_exe = get_python_executable()
+            
+            # Start with --engine 4bit argument
+            process = subprocess.Popen([
+                python_exe, str(script_path), "--engine", "4bit"
+            ], cwd=Path(__file__).parent, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            self.services[service_name] = {
+                "process": process,
+                "config": config,
+                "start_time": time.time()
+            }
+            
+            # Track engine mode for Hira Dia TTS (default is full mode)
+            if service_name == "hira_dia_tts":
+                self.intended_engine_mode[service_name] = "full"
+            
+            # Track that this service was intended to run in 4-bit mode
+            self.intended_engine_mode[service_name] = "4bit"
+            
+            # Wait longer to see if it starts successfully (FastAPI startup takes time)
+            time.sleep(3)
+            
+            if process.poll() is None:
+                # Process is still running, but let's wait a bit more to see if it crashes during startup
+                print(f"⏳ {config['description']} starting... (checking for startup errors)")
+                time.sleep(2)
+                
+                if process.poll() is None:
+                    print(f"⏳ {config['description']} starting... (may need a moment to initialize)")
+                    return True
+                else:
+                    # Crashed during extended startup check
+                    stdout, stderr = process.communicate()
+                    print(f"❌ Service crashed during startup:")
+                    if stderr:
+                        print(f"   Error: {stderr.decode()}")
+                    if stdout:
+                        print(f"   Output: {stdout.decode()}")
+                    
+                    # Clean up failed service registration
+                    if service_name in self.services:
+                        del self.services[service_name]
+                    if service_name in self.intended_engine_mode:
+                        del self.intended_engine_mode[service_name]
+                    
+                    return False
+            else:
+                stdout, stderr = process.communicate()
+                print(f"❌ Service failed to start:")
+                if stderr:
+                    print(f"   Error: {stderr.decode()}")
+                if stdout:
+                    print(f"   Output: {stdout.decode()}")
+                
+                # Clean up failed service registration
+                if service_name in self.services:
+                    del self.services[service_name]
+                if service_name in self.intended_engine_mode:
+                    del self.intended_engine_mode[service_name]
+                
+                return False
+                
+        except Exception as e:
+            print(f"❌ Failed to start service: {e}")
+            return False
     
     def check_service_health(self, service_name: str, timeout: float = 2, use_cache: bool = True) -> bool:
         """Check if a service is healthy (with caching for better UX)"""
@@ -347,6 +460,101 @@ class EnhancedServiceManager:
             self._status_cache.clear()
             self._status_cache_time.clear()
     
+    def get_hira_dia_engine_status(self) -> dict:
+        """Get current engine status for Unified Hira Dia TTS service"""
+        try:
+            response = requests.get("http://localhost:8012/engines", timeout=3)
+            if response.status_code == 200:
+                data = response.json()
+                current_engine = data.get("current_engine", "unknown")
+                
+                # Map engine names to display-friendly names
+                engine_display_map = {
+                    "nari_dia": "full_dia",
+                    "dia_4bit": "dia_4bit"
+                }
+                
+                display_engine = engine_display_map.get(current_engine, current_engine)
+                
+                return {
+                    "current_engine": display_engine,
+                    "available_engines": [e.get("name", "unknown") for e in data.get("available_engines", [])],
+                    "service_responsive": True
+                }
+        except Exception:
+            pass
+        
+        return {
+            "current_engine": "unknown",
+            "available_engines": [],
+            "service_responsive": False
+        }
+    
+    def switch_hira_dia_engine(self, engine_mode: str) -> bool:
+        """Switch Hira Dia engine mode"""
+        try:
+            response = requests.post(f"http://localhost:8012/switch_engine", 
+                                   params={"engine": engine_mode}, 
+                                   timeout=5)
+            if response.status_code == 200:
+                self.service_configs["hira_dia_tts"]["current_engine"] = engine_mode
+                return True
+        except Exception as e:
+            print(f"❌ Failed to switch engine: {e}")
+        
+        return False
+    
+    def handle_hira_dia_engine_switch_sync(self):
+        """Synchronous wrapper for engine switching"""
+        import asyncio
+        try:
+            asyncio.run(self.handle_hira_dia_engine_switch())
+        except Exception as e:
+            print(f"❌ Error switching engine: {e}")
+    
+    async def handle_hira_dia_engine_switch(self):
+        """Handle switching Hira Dia engine mode"""
+        print("\n🎭 Hira Dia Engine Mode Switching")
+        print("=" * 50)
+        
+        # Get current status
+        current_engine = self.get_hira_dia_engine_status()
+        if not current_engine:
+            print("❌ Unable to get current engine status. Is the Hira Dia service running?")
+            return
+            
+        print(f"Current Engine: {current_engine}")
+        
+        # Show options
+        print("\nAvailable Engine Modes:")
+        print("1. 🎭 Full Dia (Quality Mode)")
+        print("2. ⚡ 4-bit Dia (Speed Mode)")  
+        print("3. 🤖 Auto (Smart Selection)")
+        print("0. Cancel")
+        
+        choice = input("\nSelect new engine mode (0-3): ").strip()
+        
+        engine_map = {
+            "1": "NARI_DIA",
+            "2": "DIA_4BIT", 
+            "3": "AUTO"
+        }
+        
+        if choice == "0":
+            print("❌ Engine switch cancelled")
+            return
+        elif choice in engine_map:
+            new_engine = engine_map[choice]
+            print(f"🔄 Switching to {new_engine}...")
+            
+            result = self.switch_hira_dia_engine(new_engine)
+            if result:
+                print(f"✅ Successfully switched to {new_engine}")
+            else:
+                print(f"❌ Failed to switch to {new_engine}")
+        else:
+            print("❌ Invalid choice")
+    
     def get_service_status(self, fast_mode: bool = False) -> dict:
         """Get status of all services (including those running independently)"""
         status = {}
@@ -372,11 +580,17 @@ class EnhancedServiceManager:
                         "managed": True
                     }
                 else:
+                    # Process has crashed - clean up and mark as stopped
+                    print(f"🔍 Detected crashed service: {service_name}, cleaning up...")
+                    del self.services[service_name]
+                    if service_name in self.intended_engine_mode:
+                        del self.intended_engine_mode[service_name]
+                    
                     status[service_name] = {
-                        "status": "crashed",
+                        "status": "stopped",
                         "port": config["port"], 
                         "description": config["description"],
-                        "managed": True
+                        "managed": False
                     }
             else:
                 # Check if service is running independently
@@ -417,7 +631,34 @@ class EnhancedServiceManager:
             }.get(info["status"], "❓")
             
             # Extract service name without descriptive text for cleaner display
-            clean_name = info['description'].replace(" Service", "").replace(" (OpenAI)", "").replace(" (Fast)", "").replace(" (High Quality)", "")
+            clean_name = info['description']
+            
+            # Clean up service names for consistent display
+            service_name_map = {
+                "orchestrator": "Orchestrator",
+                "whisper_stt": "Whisper STT", 
+                "kokoro_tts": "Kokoro TTS",
+                "hira_dia_tts": "Hira Dia TTS",  # Default, may be overridden below
+                "mistral_llm": "Mistral LLM",
+                "gpt_llm": "GPT LLM"
+            }
+            
+            # Use mapped name if available, otherwise clean the description
+            if service_name in service_name_map:
+                clean_name = service_name_map[service_name]
+                
+                # Special handling for Hira Dia TTS based on intended engine mode
+                if service_name == "hira_dia_tts":
+                    intended_mode = self.intended_engine_mode.get(service_name, "full")
+                    if intended_mode == "4bit":
+                        clean_name = "Dia 4-bit TTS"
+                    else:
+                        clean_name = "Hira Dia TTS"
+            else:
+                # Fallback: clean the description text
+                clean_name = clean_name.replace(" Service", "").replace(" (OpenAI)", "").replace(" (Fast)", "").replace(" (High Quality)", "")
+                clean_name = clean_name.replace(" (Quality)", "").replace(" (Speed)", "").replace("🎭 ", "").replace("⚡ ", "")
+                clean_name = clean_name.replace(" (Quality + Speed)", "").replace("(FastAPI)", "").replace("Unified ", "")
             
             # Format with aligned columns
             port_text = f"(Port {info['port']}):"
@@ -435,6 +676,29 @@ class EnhancedServiceManager:
             if info["status"] == "healthy" and "uptime" in info and info.get("managed", False):
                 uptime_min = info["uptime"] / 60
                 print(f"      ⏱️   Uptime: {uptime_min:.1f} minutes")
+            
+            # Show engine status for Hira Dia TTS if healthy
+            if service_name == "hira_dia_tts" and info["status"] == "healthy":
+                engine_status = self.get_hira_dia_engine_status()
+                if engine_status["service_responsive"]:
+                    current_engine = engine_status["current_engine"]
+                    intended_mode = self.intended_engine_mode.get(service_name, "full")
+                    
+                    # Map engine names to display format
+                    engine_display_map = {
+                        "nari_dia": "🎭 Full Dia (Quality)",
+                        "dia_4bit": "⚡ 4-bit Dia (Speed)",
+                        "auto": "🤖 Auto Selection"
+                    }
+                    
+                    current_display = engine_display_map.get(current_engine, f"❓ {current_engine}")
+                    
+                    # Show warning if intended mode differs from actual mode
+                    if intended_mode == "4bit" and current_engine != "dia_4bit":
+                        print(f"      🔧  Engine: {current_display}")
+                        print(f"      ⚠️   Intended: ⚡ 4-bit Dia (fallback to Full Dia due to loading issues)")
+                    else:
+                        print(f"      🔧  Engine: {current_display}")
         
         print()  # Extra line for spacing
     
@@ -450,10 +714,31 @@ class EnhancedServiceManager:
         print(f"Use case: {combo['use_case']}")
         print("-" * 50)
         
+        # Special handling for efficient combo - using dedicated Dia 4-bit service
+        if combo_type == "efficient":
+            print("⚡ Using dedicated Dia 4-bit TTS service for maximum efficiency...")
+        
         success_count = 0
         for service_name in combo["services"]:
-            if self.start_service(service_name):
-                success_count += 1
+            # Special handling for efficient combo TTS service
+            if combo_type == "efficient" and service_name == "hira_dia_tts":
+                # Stop existing TTS service if running in wrong mode
+                if self.check_service_health("hira_dia_tts", timeout=1, use_cache=False):
+                    print("� Stopping existing TTS service to switch to Dia 4-bit mode...")
+                    self.stop_service("hira_dia_tts")
+                    time.sleep(2)  # Wait for service to stop
+                
+                # Start directly in Dia 4-bit mode (DISABLED - using dedicated service now)
+                # if self.start_dia_4bit_service():
+                #     success_count += 1
+                #     print("✅ Started TTS service in Dia 4-bit mode")
+                # else:
+                #     print("❌ Failed to start TTS service in Dia 4-bit mode")
+                pass  # This special case is now obsolete
+            else:
+                # Regular service start
+                if self.start_service(service_name):
+                    success_count += 1
             time.sleep(1)  # Brief pause between starts
         
         print(f"\n📊 Results: {success_count}/{len(combo['services'])} services started")
@@ -473,17 +758,34 @@ class EnhancedServiceManager:
                 print(f"  {config['description']}: http://localhost:{config['port']}")
     
     def stop_all_services(self):
-        """Stop all running services"""
-        if not self.services:
-            print("\n⏹️  No services are currently running")
+        """Stop all running services (both managed and independent)"""
+        print(f"\n🛑 Stopping all services...")
+        
+        # Get current status to find all running services
+        status = self.get_service_status(fast_mode=False)
+        running_services = [name for name, info in status.items() if info["status"] == "healthy"]
+        
+        if not running_services:
+            print("⏹️  No services are currently running")
             return
         
-        print(f"\n🛑 Stopping all {len(self.services)} services...")
+        stopped_count = 0
+        for service_name in running_services:
+            print(f"🛑 Stopping {service_name}...")
+            if self.stop_service(service_name):
+                stopped_count += 1
+                print(f"✅ {service_name} stopped")
+            else:
+                print(f"❌ Failed to stop {service_name}")
         
-        for service_name in list(self.services.keys()):
-            self.stop_service(service_name)
+        # Clear the services registry for managed services
+        self.services.clear()
+        self.intended_engine_mode.clear()
         
-        print("✅ All services stopped")
+        # Invalidate cache to reflect changes
+        self.invalidate_cache()
+        
+        print(f"✅ Stopped {stopped_count}/{len(running_services)} services")
     
     def test_running_services(self):
         """Test all currently running services"""
@@ -633,7 +935,7 @@ class EnhancedServiceManager:
         while self.running:
             try:
                 self.show_main_menu()
-                choice = input("\nEnter your choice (0-10): ").strip()
+                choice = input("\nEnter your choice (0-11): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -643,9 +945,9 @@ class EnhancedServiceManager:
                 elif choice == "2":
                     self.start_combination("fast")
                 elif choice == "3":
-                    self.start_combination("balanced")
-                elif choice == "4":
                     self.start_combination("efficient")
+                elif choice == "4":
+                    self.start_combination("balanced")
                 elif choice == "5":
                     self.start_combination("quality")
                 elif choice == "6":
@@ -658,8 +960,10 @@ class EnhancedServiceManager:
                     self.launch_comprehensive_tests()
                 elif choice == "10":
                     self.manage_gpu_models()
+                elif choice == "11":
+                    self.handle_hira_dia_engine_switch_sync()
                 else:
-                    print("❌ Invalid choice. Please enter 0-10.")
+                    print("❌ Invalid choice. Please enter 0-11.")
                 
                 # Only pause for status/info displays, not for interactive actions
                 if choice in ["1"]:  # Only for status display
@@ -674,8 +978,18 @@ class EnhancedServiceManager:
     
     def show_main_menu(self):
         """Show the main menu following existing test patterns"""
-        print("\n🎭 Enhanced Independent Microservices Manager")
+        print("\n" + "=" * 60)
+        print("🎭 Enhanced Independent Microservices Manager")
         print("=" * 60)
+        print()
+        print("This provides numbered menu for independent services:")
+        print("- Fast: Kokoro TTS + Mistral LLM")
+        print("- Balanced: Kokoro TTS + GPT LLM")
+        print("- Efficient: Dia 4-bit TTS + Mistral LLM")
+        print("- Quality: Hira Dia TTS + GPT LLM")
+        print("- Individual service management")
+        print("- Comprehensive testing")
+        print()  # Add blank line for better readability
         
         # Check cache status
         current_time = time.time()
@@ -700,7 +1014,24 @@ class EnhancedServiceManager:
         if show_loading:
             print("✅ Status check complete!")
         
-        running_services = [info["description"] for name, info in status.items() if info["status"] == "healthy"]
+        running_services = []
+        for name, info in status.items():
+            if info["status"] == "healthy":
+                service_desc = info["description"]
+                
+                # For Hira Dia TTS, show the actual engine mode
+                if name == "hira_dia_tts":
+                    engine_status = self.get_hira_dia_engine_status()
+                    if engine_status["service_responsive"]:
+                        current_engine = engine_status["current_engine"]
+                        if current_engine == "dia_4bit":
+                            service_desc = "Unified Hira Dia TTS (Dia 4-bit Mode)"
+                        elif current_engine == "full_dia":
+                            service_desc = "Unified Hira Dia TTS (Full Dia Mode)"
+                        else:
+                            service_desc = f"Unified Hira Dia TTS ({current_engine})"
+                
+                running_services.append(service_desc)
         
         if running_services:
             print(f"🟢 Currently running: {', '.join(running_services)}")
@@ -709,10 +1040,10 @@ class EnhancedServiceManager:
         
         print("\n📋 Service Combinations (Following existing patterns):")
         print("  1. Show detailed service status")
-        print("  2. Start Fast Combo (Orchestrator + Whisper STT + Kokoro TTS + Mistral LLM)")
-        print("  3. Start Balanced Combo (Orchestrator + Whisper STT + Kokoro TTS + GPT LLM)")
-        print("  4. Start Efficient Combo (Orchestrator + Whisper STT + Hira Dia TTS + Mistral LLM)")
-        print("  5. Start Quality Combo (Orchestrator + Whisper STT + Hira Dia TTS + GPT LLM)")
+        print("  2. Start Fast Combo (Orchestrator + Whisper STT + Mistral LLM + Kokoro TTS)")
+        print("  3. Start Efficient Combo (Orchestrator + Whisper STT + Mistral LLM + Dia 4-bit TTS)")
+        print("  4. Start Balanced Combo (Orchestrator + Whisper STT + GPT LLM + Kokoro TTS)")
+        print("  5. Start Quality Combo (Orchestrator + Whisper STT + GPT LLM + Hira Dia TTS)")
         
         print("\n⚙️  Service Management:")
         print("  6. Manage individual services")
@@ -720,8 +1051,9 @@ class EnhancedServiceManager:
         print("  8. Test running services")
         print("  9. Launch comprehensive test suite")
         
-        print("\n🎮 GPU Model Selection:")
+        print("\n🎮 Advanced Options:")
         print(" 10. Select GPU/LLM Model (8GB → AWS A100)")
+        print(" 11. Switch Hira Dia Engine Mode (Quality ↔ Speed)")
         
         print("\n  0. Exit")
     
@@ -754,7 +1086,18 @@ class EnhancedServiceManager:
             if show_loading:
                 print("✅ Status check complete!")
             
-            service_list = list(self.service_configs.items())
+            # Define service order: Orchestrator → STT → LLM → TTS
+            service_order = [
+                "orchestrator",
+                "whisper_stt", 
+                "mistral_llm",
+                "gpt_llm",
+                "kokoro_tts",
+                "hira_dia_tts"
+            ]
+            
+            # Create ordered service list
+            service_list = [(name, self.service_configs[name]) for name in service_order if name in self.service_configs]
             
             # Create simplified service names without descriptions
             service_names = {
@@ -762,10 +1105,12 @@ class EnhancedServiceManager:
                 "whisper_stt": "Whisper STT", 
                 "kokoro_tts": "Kokoro TTS",
                 "hira_dia_tts": "Hira Dia TTS",
+                "dia_4bit_tts": "Dia 4-bit TTS",  # Virtual service option
                 "mistral_llm": "Mistral LLM",
                 "gpt_llm": "GPT LLM"
             }
             
+            # Display regular services
             for i, (service_name, config) in enumerate(service_list, 1):
                 service_status = status[service_name]["status"]
                 status_icon = {
@@ -779,6 +1124,16 @@ class EnhancedServiceManager:
                 
                 # Simplified formatting like the example with adjusted spacing
                 simple_name = service_names.get(service_name, config['description'])
+                
+                # For Hira Dia TTS, show the actual engine mode
+                if service_name == "hira_dia_tts" and service_status in ["healthy", "unhealthy"]:
+                    engine_status = self.get_hira_dia_engine_status()
+                    if engine_status["service_responsive"]:
+                        if engine_status["current_engine"] == "dia_4bit":
+                            simple_name = "Hira Dia TTS (4-bit mode)"
+                        elif engine_status["current_engine"] == "full_dia":
+                            simple_name = "Hira Dia TTS (Full mode)"
+                
                 service_desc = f"{action} {simple_name}"
                 
                 # Add extra space for "stopped" status to match "healthy" alignment
@@ -790,11 +1145,42 @@ class EnhancedServiceManager:
                 # Align the status text to column 40
                 print(f"  {i}. {service_desc:<35} {status_text}")
             
+            # Add special Dia 4-bit TTS option (only when not already shown in main list)
+            hira_dia_status = status["hira_dia_tts"]["status"]
+            show_dia_4bit_option = True
+            
+            # Check if Hira Dia is running in 4-bit mode (already shown in main list)
+            if hira_dia_status in ["healthy", "unhealthy"]:
+                engine_status = self.get_hira_dia_engine_status()
+                if engine_status["service_responsive"] and engine_status["current_engine"] == "dia_4bit":
+                    show_dia_4bit_option = False  # Don't show duplicate - already shown as "Hira Dia TTS (4-bit mode)"
+            
+            dia_4bit_num = len(service_list) + 1
+            
+            if show_dia_4bit_option:
+                if hira_dia_status in ["healthy", "unhealthy"]:
+                    # Service is running in full mode - offer to switch
+                    dia_action = "Switch to"
+                    dia_status_icon = "🔄"
+                    dia_status_text = f"({dia_status_icon}  ready)"
+                else:
+                    # Service is stopped - offer to start in 4-bit mode
+                    dia_action = "Start"
+                    dia_status_icon = "⏹️"
+                    dia_status_text = f"({dia_status_icon}  stopped)"
+                    
+                dia_service_desc = f"{dia_action} Dia 4-bit TTS"
+                print(f"  {dia_4bit_num}. {dia_service_desc:<35} {dia_status_text}")
+                
+                max_choice = dia_4bit_num
+            else:
+                max_choice = len(service_list)  # No Dia 4-bit option shown
+            
             print("  r. Refresh status (clear cache)")
             print("  0. Back to main menu")
             
             try:
-                choice = input(f"\nSelect service (0-{len(service_list)}, r): ").strip().lower()
+                choice = input(f"\nSelect service (0-{max_choice}, r): ").strip().lower()
                 
                 if choice == "0":
                     break
@@ -829,6 +1215,102 @@ class EnhancedServiceManager:
                     self.invalidate_cache()
                     time.sleep(1)  # Give service a moment to change state
                     continue  # This will refresh the menu automatically
+                elif choice.isdigit() and show_dia_4bit_option and int(choice) == dia_4bit_num:
+                    # Handle Dia 4-bit TTS special option (only when shown)
+                    print(f"\n⚡ Managing Dia 4-bit TTS...")
+                    
+                    hira_dia_status = status["hira_dia_tts"]["status"]
+                    
+                    if hira_dia_status in ["healthy", "unhealthy"]:
+                        # Service is running in full mode - switch to 4-bit
+                        print("🔄 Switching Hira Dia TTS to Dia 4-bit mode...")
+                        switch_success = False
+                        switch_retries = 0
+                        max_switch_retries = 3
+                        
+                        while switch_retries < max_switch_retries and not switch_success:
+                            switch_success = self.switch_hira_dia_engine("DIA_4BIT")
+                            if not switch_success:
+                                switch_retries += 1
+                                if switch_retries < max_switch_retries:
+                                    print(f"⏳ Retrying switch... ({switch_retries}/{max_switch_retries})")
+                                    time.sleep(1)
+                        
+                        if switch_success:
+                            print("✅ Successfully switched to Dia 4-bit mode")
+                            # Verify the switch worked
+                            time.sleep(1)
+                            current_engine = self.get_hira_dia_engine_status()
+                            if current_engine == "DIA_4BIT":
+                                print("🎯 Confirmed: Service is now in Dia 4-bit mode")
+                            else:
+                                print(f"⚠️ Warning: Expected DIA_4BIT but got {current_engine}")
+                        else:
+                            print("❌ Failed to switch to Dia 4-bit mode after multiple attempts")
+                    else:
+                        # Start the service in Dia 4-bit mode directly
+                        print("🚀 Starting Hira Dia TTS in Dia 4-bit mode...")
+                        success = self.start_dia_4bit_service()
+                        if success:
+                            print("✅ Dia 4-bit TTS started successfully")
+                            
+                            # Wait for service to be ready (longer timeout for TTS initialization)
+                            print("⏳ Waiting for service to be ready...")
+                            retry_count = 0
+                            max_retries = 25  # Increased timeout for TTS initialization (25 * 4s = 100s)
+                            service_ready = False
+                            
+                            while retry_count < max_retries:
+                                # First check if the process is still running
+                                if "hira_dia_tts" in self.services:
+                                    process = self.services["hira_dia_tts"]["process"]
+                                    if process.poll() is not None:
+                                        # Process has crashed
+                                        print(f"❌ Service process crashed during initialization (exit code: {process.poll()})")
+                                        # Get error output
+                                        stdout, stderr = process.communicate()
+                                        if stderr:
+                                            print(f"   Error details: {stderr.decode().strip()}")
+                                        # Clean up
+                                        del self.services["hira_dia_tts"]
+                                        if "hira_dia_tts" in self.intended_engine_mode:
+                                            del self.intended_engine_mode["hira_dia_tts"]
+                                        service_ready = False
+                                        break
+                                
+                                time.sleep(4)  # Longer intervals for TTS initialization
+                                if self.check_service_health("hira_dia_tts", timeout=2, use_cache=False):
+                                    service_ready = True
+                                    break
+                                retry_count += 1
+                                print(f"⏳ Service initializing... ({retry_count}/{max_retries}) - TTS engines loading...")
+                            
+                            if service_ready:
+                                # Verify it started in Dia 4-bit mode
+                                time.sleep(1)
+                                engine_status = self.get_hira_dia_engine_status()
+                                if engine_status["service_responsive"]:
+                                    current_engine = engine_status["current_engine"]
+                                    
+                                    if current_engine == "dia_4bit":
+                                        print("🎯 Confirmed: Service started in Dia 4-bit mode")
+                                    else:
+                                        print(f"❌ CRITICAL: Service should have failed but started in {current_engine} mode")
+                                        print("   🔧 The strict mode implementation needs verification")
+                                else:
+                                    print("⚠️ Could not verify engine mode - service may still be initializing")
+                            else:
+                                print("❌ Service started but did not become ready in time")
+                        else:
+                            print("❌ Dia 4-bit TTS failed to start (this is expected until torch_dtype issue is fixed)")
+                            print("   💡 Service correctly refused to fall back to Full Dia mode")
+                            print("   🔧 Check the service logs for the specific error details")
+                    
+                    # Auto-refresh status after operation
+                    print("🔄 Refreshing status...")
+                    self.invalidate_cache()
+                    time.sleep(1)
+                    continue
                 else:
                     print("❌ Invalid choice")
             except ValueError:
@@ -839,8 +1321,9 @@ class EnhancedServiceManager:
     
     def launch_comprehensive_tests(self):
         """Launch comprehensive test suite following existing patterns"""
-        print("\n🧪 Launching Comprehensive Test Suite")
-        print("-" * 50)
+        print("=" * 70)
+        print("🧪 Launching Comprehensive Test Suite")
+        print("=" * 70)
         
         try:
             # Try to run the existing test script

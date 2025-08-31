@@ -65,24 +65,23 @@ def show_main_menu():
 
 def launch_enhanced_service_manager():
     """Launch the enhanced service manager."""
-    print("=" * 60)
-    print("🎭 Enhanced Independent Microservices Manager")
-    print("=" * 60)
-    print()
-    print("This provides numbered menu for independent services:")
-    print("- Fast: Kokoro TTS + Mistral LLM")
-    print("- Balanced: Kokoro TTS + GPT LLM") 
-    print("- Efficient: Hira Dia TTS + Mistral LLM")
-    print("- Quality: Hira Dia TTS + GPT LLM")
-    print("- Individual service management")
-    print("- Comprehensive testing")
-    print()
-    
     script_path = project_root / "aws_microservices" / "enhanced_service_manager.py"
     if script_path.exists():
         subprocess.run([sys.executable, str(script_path)], cwd=project_root)
     else:
         print(f"❌ Enhanced service manager not found at: {script_path}")
+        print("=" * 60)
+        print("🎭 Enhanced Independent Microservices Manager")
+        print("=" * 60)
+        print()
+        print("This provides numbered menu for independent services:")
+        print("- Fast: Kokoro TTS + Mistral LLM")
+        print("- Balanced: Kokoro TTS + GPT LLM") 
+        print("- Efficient: Hira Dia TTS + Mistral LLM")
+        print("- Quality: Hira Dia TTS + GPT LLM")
+        print("- Individual service management")
+        print("- Comprehensive testing")
+        print()
 
 def launch_original_orchestrator():
     """Launch the original FastAPI orchestrator."""

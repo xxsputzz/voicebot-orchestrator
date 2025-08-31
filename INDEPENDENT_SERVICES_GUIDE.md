@@ -72,21 +72,43 @@ response = requests.post("http://localhost:8011/synthesize", json={
 })
 ```
 
-#### **Hira Dia TTS Service (Port 8012)**
-- **Speed**: ~3+ minutes generation time
-- **Quality**: Maximum
+#### **Unified Hira Dia TTS Service (Port 8012)** 🆕
+- **Engines**: Dual-mode support (Full Dia + 4-bit Dia)
+- **Speed**: 
+  - Full Dia: ~3+ minutes generation time
+  - 4-bit Dia: ~30-60 seconds generation time
+- **Quality**: 
+  - Full Dia: Maximum quality
+  - 4-bit Dia: Optimized quality
 - **Voice**: Adaptive dialogue-focused
-- **Best For**: Highest quality output
+- **Features**: Auto engine selection, runtime switching, quality/speed optimization
+- **Best For**: Flexible use cases requiring both quality and speed
 - **Resource**: GPU required
-- **Use Cases**: Content creation, professional presentations, audio books
+- **Use Cases**: Content creation, professional presentations, speed-optimized applications
 
 ```python
-# Test Hira Dia TTS  
+# Test Unified Hira Dia TTS with engine preferences
 import requests
 
+# High quality synthesis (Full Dia)
 response = requests.post("http://localhost:8012/synthesize", json={
-    "text": "This is Hira Dia with maximum quality synthesis.",
+    "text": "This is Full Dia with maximum quality synthesis.",
+    "engine_preference": "full",
     "high_quality": True
+})
+
+# Speed-optimized synthesis (4-bit Dia)
+response = requests.post("http://localhost:8012/synthesize", json={
+    "text": "This is 4-bit Dia with speed optimization.",
+    "engine_preference": "4bit",
+    "high_quality": False
+})
+
+# Auto selection based on text length and quality preference
+response = requests.post("http://localhost:8012/synthesize", json={
+    "text": "Auto-selected engine based on text and preferences.",
+    "engine_preference": "auto",
+    "high_quality": True  # Bias towards quality
 })
 ```
 
@@ -137,14 +159,21 @@ response = requests.post("http://localhost:8022/generate", json={
 - **Resource**: Moderate GPU/CPU
 
 ### **Quality Combination (Professional)**
-- **Hira Dia TTS** + **GPT LLM**  
+- **Unified Hira Dia TTS (Full mode)** + **GPT LLM**  
 - **Total Time**: ~8+ minutes
 - **Use Case**: High-quality content, presentations
 - **Resource**: High GPU memory
 
-### **Balanced Combinations**
+### **Speed-Optimized Quality (NEW)**
+- **Unified Hira Dia TTS (4-bit mode)** + **Mistral LLM**
+- **Total Time**: ~1-2 minutes
+- **Use Case**: Professional quality with reasonable speed
+- **Resource**: Moderate GPU memory
+
+### **Adaptive Combinations (NEW)**
+- **Unified Hira Dia TTS (Auto mode)** + **Any LLM**: Smart quality/speed selection
 - **Kokoro TTS** + **GPT LLM**: Fast TTS, advanced reasoning
-- **Hira Dia TTS** + **Mistral LLM**: Quality TTS, efficient LLM
+- **Unified Hira Dia TTS** + **Mistral LLM**: Flexible quality with efficient reasoning
 
 ## 🛠 **Service Management**
 
