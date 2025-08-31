@@ -20,7 +20,16 @@ import time
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from voicebot_orchestrator.tts import KokoroTTS
+
+# Try real Kokoro first, fallback to basic implementation
+try:
+    from voicebot_orchestrator.real_kokoro_tts import KokoroTTS
+    print("[OK] Using Real Kokoro TTS implementation")
+    USING_REAL_KOKORO = True
+except ImportError as e:
+    print(f"[WARNING] Real Kokoro not available ({e}), using basic implementation")
+    from voicebot_orchestrator.tts import KokoroTTS
+    USING_REAL_KOKORO = False
 
 app = FastAPI(title="Kokoro TTS Microservice", version="1.0.0")
 
@@ -82,11 +91,12 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "tts_kokoro",
-        "engine": "kokoro",
+        "engine": "real_kokoro" if USING_REAL_KOKORO else "kokoro_placeholder",
+        "implementation": "Real Kokoro ONNX" if USING_REAL_KOKORO else "Speech-like patterns",
         "timestamp": time.time(),
         "ready": tts_service is not None,
         "performance": "~0.8s generation time",
-        "best_for": "real-time conversation"
+        "best_for": "real-time conversation with actual speech" if USING_REAL_KOKORO else "testing and development"
     }
 
 @app.post("/synthesize", response_model=SynthesizeResponse)
@@ -117,7 +127,8 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
         metadata = {
             "processing_time_seconds": round(total_time, 3),
             "generation_time_seconds": round(gen_time, 3),
-            "engine_used": "kokoro",
+            "engine_used": "real_kokoro" if USING_REAL_KOKORO else "kokoro_placeholder",
+            "implementation": "Real Kokoro ONNX" if USING_REAL_KOKORO else "Speech-like patterns",
             "text_length": len(request.text),
             "audio_size_bytes": len(audio_bytes),
             "estimated_duration_seconds": len(audio_bytes) / 32000,
@@ -178,17 +189,18 @@ async def service_info():
     """Get Kokoro TTS service information"""
     return {
         "service": "tts_kokoro",
-        "engine": "kokoro",
+        "engine": "real_kokoro" if USING_REAL_KOKORO else "kokoro_placeholder",
+        "implementation": "Real Kokoro ONNX" if USING_REAL_KOKORO else "Speech-like patterns",
         "port": 8011,
         "speed": "~0.8s per request",
-        "quality": "Good",
+        "quality": "High (Real Speech)" if USING_REAL_KOKORO else "Good (Speech-like patterns)",
         "voice": "af_bella (professional female)",
-        "best_for": "Real-time conversation",
+        "best_for": "Real-time conversation with actual speech" if USING_REAL_KOKORO else "Testing and development",
         "supported_formats": ["wav", "mp3"],
         "max_text_length": 5000,
         "voices": ["af_bella", "af_nicole", "af_sarah", "am_adam", "am_michael"],
         "independent": True,
-        "description": "Dedicated Kokoro TTS service for fast speech synthesis"
+        "description": f"Dedicated Kokoro TTS service using {'real ONNX models' if USING_REAL_KOKORO else 'speech-like patterns'}"
     }
 
 @app.get("/status")

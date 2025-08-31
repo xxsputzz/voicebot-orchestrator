@@ -1,9 +1,10 @@
 @echo off
+chcp 65001 >nul
 REM TTS/LLM Combination Testing Script
 REM Tests different combinations of TTS engines and LLM models
 
 echo.
-echo 🎭 TTS/LLM Combination Testing Suite
+echo TTS/LLM Combination Testing Suite
 echo =====================================
 echo.
 
@@ -46,14 +47,14 @@ goto MENU
 
 :TEST_ALL_GENERAL
 echo.
-echo 🧪 Running All Combinations Test (General)...
+echo Running All Combinations Test (General)...
 python test_tts_llm_combinations.py
 pause
 goto MENU
 
 :TEST_ALL_INDEPENDENT
 echo.
-echo 🧪 Running All Combinations Test (Independent Services)...
+echo Running All Combinations Test (Independent Services)...
 echo Note: This requires independent microservices to be running
 echo Start them with: cd aws_microservices && python enhanced_service_manager.py
 echo.
@@ -63,35 +64,35 @@ goto MENU
 
 :TEST_KOKORO
 echo.
-echo 🎙️ Testing Kokoro TTS only...
+echo Testing Kokoro TTS only...
 python test_tts_llm_combinations.py --tts kokoro
 pause
 goto MENU
 
 :TEST_HIRA_DIA
 echo.
-echo 🎙️ Testing Hira Dia TTS only...
+echo Testing Hira Dia TTS only...
 python test_tts_llm_combinations.py --tts hira_dia
 pause
 goto MENU
 
 :TEST_MISTRAL
 echo.
-echo 🧠 Testing Mistral LLM only...
+echo Testing Mistral LLM only...
 python test_tts_llm_combinations.py --llm mistral
 pause
 goto MENU
 
 :TEST_GPT
 echo.
-echo 🧠 Testing GPT LLM only...
+echo Testing GPT LLM only...
 python test_tts_llm_combinations.py --llm gpt
 pause
 goto MENU
 
 :TEST_QUICK
 echo.
-echo ⚡ Running Quick Test...
+echo Running Quick Test...
 python test_tts_llm_combinations.py --quick
 pause
 goto MENU
@@ -113,7 +114,7 @@ if "%combo_choice%"=="4" set combo_name=hira_dia_gpt
 
 if defined combo_name (
     echo.
-    echo 🧪 Testing %combo_name% combination...
+    echo Testing %combo_name% combination...
     python test_independent_combinations.py --combination %combo_name%
 ) else (
     echo Invalid choice.
@@ -123,7 +124,7 @@ goto MENU
 
 :CHECK_SERVICES
 echo.
-echo 🔍 Checking Independent Service Status...
+echo Checking Independent Service Status...
 echo.
 
 REM Check each service
@@ -154,7 +155,7 @@ goto MENU
 
 :EXIT
 echo.
-echo 👋 Goodbye!
+echo Goodbye!
 echo.
 echo Generated audio files can be found in:
 echo   tests\audio_samples\tts_llm_combinations\

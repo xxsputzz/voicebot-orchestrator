@@ -61,13 +61,25 @@ class RealOllamaLLM:
         try:
             models_response = await asyncio.to_thread(client.list)
             
-            # Handle different response formats
-            if isinstance(models_response, dict) and 'models' in models_response:
+            # Handle different response formats from Ollama
+            available_models = []
+            
+            # Check if it's the new ListResponse type
+            if hasattr(models_response, 'models'):
+                # New format: ListResponse object with .models attribute
+                models_list = models_response.models
+                available_models = [getattr(model, 'model', getattr(model, 'name', str(model))) for model in models_list]
+            elif isinstance(models_response, dict) and 'models' in models_response:
+                # Old format: dict with 'models' key
                 available_models = [model.get('name', model.get('model', '')) for model in models_response['models']]
             elif isinstance(models_response, list):
-                available_models = [model.get('name', model.get('model', '')) for model in models_response]
+                # Direct list format
+                available_models = [model.get('name', model.get('model', '')) for model in models_response if isinstance(model, dict)]
             else:
                 print(f"⚠️ Unexpected models response format: {type(models_response)}")
+                # Try to convert to string and extract model info
+                models_str = str(models_response)
+                print(f"   Raw response: {models_str[:200]}...")
                 available_models = []
             
             print(f"📋 Available Ollama models: {available_models}")
@@ -76,14 +88,10 @@ class RealOllamaLLM:
             is_available = any(self.model_name in model for model in available_models)
             
             if not is_available:
-                print(f"⚠️ Model '{self.model_name}' not found. Attempting to pull...")
-                try:
-                    await asyncio.to_thread(client.pull, self.model_name)
-                    print(f"✅ Successfully pulled model '{self.model_name}'")
-                    return True
-                except Exception as e:
-                    print(f"❌ Failed to pull model '{self.model_name}': {e}")
-                    return False
+                print(f"⚠️ Model '{self.model_name}' not found.")
+                print("   To avoid slow downloads during testing, skipping model pull.")
+                print(f"   If you want to use '{self.model_name}', run: ollama pull {self.model_name}")
+                return False
             
             print(f"✅ Model '{self.model_name}' is available")
             return True
@@ -98,7 +106,11 @@ class RealOllamaLLM:
                     prompt="Test",
                     options={'num_predict': 1}
                 )
-                return bool(test_response.get('response'))
+                # Handle response format for test
+                if isinstance(test_response, dict):
+                    return bool(test_response.get('response'))
+                else:
+                    return bool(str(test_response))
             except Exception as test_e:
                 print(f"❌ Model test also failed: {test_e}")
                 return False
@@ -174,7 +186,13 @@ class RealOllamaLLM:
             stream=False
         )
         
-        return response['response']
+        # Handle different response formats
+        if isinstance(response, dict):
+            return response.get('response', str(response))
+        elif isinstance(response, str):
+            return response
+        else:
+            return str(response)
     
     def _build_context(self, user_input: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
         """Build conversation context for the model."""

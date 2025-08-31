@@ -42,23 +42,25 @@ def show_main_menu():
     print("  3. Run All Tests")
     print("  4. Run TTS/LLM Combination Tests")
     print("  5. Run Independent Services Tests")
-    print("  6. Run Specific Test Suite")
-    print("  7. Test Menu (Batch Scripts)")
+    print("  6. Run Pipeline Tests (Currently Running Services)")
+    print("  7. Test Interactive Pipeline (Select Specific Services)")
+    print("  8. Run Specific Test Suite")
+    print("  9. Test Menu (Batch Scripts)")
     print()
     print("🚀 DEMOS & EXAMPLES:")
-    print("  8. Enterprise CLI Demo (Production Validation)")
-    print("  9. Run Sprint 6 Demo")
-    print("  10. Voice Conversation Demo")
+    print("  10. Enterprise CLI Demo (Production Validation)")
+    print("  11. Run Sprint 6 Demo")
+    print("  12. Voice Conversation Demo")
     print()
     print("📊 ANALYTICS & MONITORING:")
-    print("  11. Analytics Dashboard")
-    print("  12. Performance Report")
-    print("  13. Cache Statistics")
+    print("  13. Analytics Dashboard")
+    print("  14. Performance Report")
+    print("  15. Cache Statistics")
     print()
     print("🐳 DEPLOYMENT:")
-    print("  14. Docker Compose Setup")
-    print("  15. Kubernetes Instructions")
-    print("  16. Installation Guide")
+    print("  16. Docker Compose Setup")
+    print("  17. Kubernetes Instructions")
+    print("  18. Installation Guide")
     print()
     print("  0. Exit")
     print()
@@ -135,11 +137,6 @@ def check_service_status():
     except ImportError:
         print("❌ requests library not available. Cannot check services.")
         print("Install with: pip install requests")
-    
-    print()
-    print("To start services:")
-    print("  Option 1: Choose '1' from main menu (Enhanced Service Manager)")
-    print("  Option 2: Choose '2' from main menu (Original Orchestrator)")
 
 async def run_all_tests():
     """Run all test suites."""
@@ -176,6 +173,39 @@ async def run_combination_tests():
         subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
     else:
         print("❌ Invalid choice")
+
+async def run_pipeline_tests():
+    """Run pipeline tests for currently running services."""
+    print("🔧 Running Pipeline Tests for Currently Running Services...")
+    print("=" * 50)
+    print("This will test:")
+    print("  🎙️ STT → LLM (Speech to Language)")
+    print("  🧠 LLM → TTS (Language to Speech)")
+    print("  🎯 Full STT → LLM → TTS Pipeline")
+    print("Only tests services that are currently running!")
+    print()
+    
+    confirm = input("Continue with pipeline tests? (y/n): ").strip().lower()
+    if confirm == 'y':
+        tests_dir = project_root / "tests"
+        subprocess.run([sys.executable, "test_running_services_pipeline.py"], cwd=tests_dir)
+    else:
+        print("❌ Pipeline tests cancelled")
+
+async def run_interactive_pipeline_tests():
+    """Run interactive pipeline tests with service selection."""
+    print("🎯 Running Interactive Pipeline Tests...")
+    print("=" * 50)
+    print("This will let you:")
+    print("  🎙️ Select specific STT service")
+    print("  🧠 Select specific LLM service") 
+    print("  🔊 Select specific TTS service")
+    print("  🎯 Test individual components or full pipeline")
+    print("Only shows services that are currently running!")
+    print()
+    
+    tests_dir = project_root / "tests"
+    subprocess.run([sys.executable, "test_interactive_pipeline.py"], cwd=tests_dir)
 
 def launch_test_menu():
     """Launch the batch test menu."""
@@ -374,7 +404,7 @@ async def main():
                 except ImportError:
                     pass  # Not Windows or msvcrt not available
             
-            choice = input("Enter your choice (0-16): ").strip()
+            choice = input("Enter your choice (0-18): ").strip()
             
             if choice == "0":
                 print("\n👋 Goodbye!")
@@ -391,33 +421,38 @@ async def main():
                 # Run independent services tests specifically
                 tests_dir = project_root / "tests"
                 subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
-            # elif choice == "6":
-            #     run_specific_tests()
+            elif choice == "6":
+                await run_pipeline_tests()
             elif choice == "7":
-                launch_test_menu()
+                await run_interactive_pipeline_tests()
             elif choice == "8":
-                run_cli_demo()
+                # Run specific test suite placeholder
+                print("🔧 Run Specific Test Suite - Feature coming soon!")
             elif choice == "9":
-                run_sprint6_demo()
+                launch_test_menu()
             elif choice == "10":
-                run_voice_demo()
+                run_cli_demo()
             elif choice == "11":
-                show_analytics()
+                run_sprint6_demo()
             elif choice == "12":
-                show_performance_report()
+                run_voice_demo()
             elif choice == "13":
-                show_cache_stats()
+                show_analytics()
             elif choice == "14":
-                show_docker_setup()
+                show_performance_report()
             elif choice == "15":
-                show_kubernetes_instructions()
+                show_cache_stats()
             elif choice == "16":
+                show_docker_setup()
+            elif choice == "17":
+                show_kubernetes_instructions()
+            elif choice == "18":
                 show_installation_guide()
             else:
-                print("❌ Invalid choice. Please enter 0-16.")
+                print("❌ Invalid choice. Please enter 0-18.")
             
             # Only pause for informational displays, not for actions that launch other programs
-            if choice in ["2", "14", "15", "16"]:  # Status checks and info displays
+            if choice in ["2", "16", "17", "18"]:  # Status checks and info displays
                 input("\nPress Enter to continue...")
                 print("\n" + "="*50 + "\n")
                 

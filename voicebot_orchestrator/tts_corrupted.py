@@ -1,7 +1,71 @@
 """
 Text-to-Speech (TTS) module using real Kokoro voice synthesis.
 """
-            if model_file.exists() and voices_file.exists():
+import asyncio
+import tempfile
+import os
+import time
+from pathlib import Path
+from typing import Optional
+
+# Emoji safety function for Windows terminal
+def safe_print(text: str) -> None:
+    """Print text safely, replacing problematic emojis"""
+    emoji_replacements = {
+        "🎙️": "[MIC]",
+        "✅": "[OK]", 
+        "❌": "[ERROR]",
+        "🔄": "[LOADING]",
+        "📥": "[DOWNLOAD]",
+        "💡": "[INFO]",
+        "⚠️": "[WARNING]",
+        "🔍": "[SEARCH]"
+    }
+    
+    safe_text = text
+    for emoji, replacement in emoji_replacements.items():
+        if emoji in safe_text:
+            safe_text = safe_text.replace(emoji, replacement)
+        print(safe_text if safe_text else text.encode('ascii', 'replace').decode('ascii'))
+
+# Import real Kokoro TTS
+try:
+    from kokoro_onnx import Kokoro
+    KOKORO_AVAILABLE = True
+    safe_print("✅ Kokoro TTS available")
+except ImportError:
+    KOKORO_AVAILABLE = False
+    safe_print("❌ Kokoro TTS not available")
+
+
+class KokoroTTS:
+    """Kokoro-based text-to-speech processor with real voice synthesis."""
+    
+    def __init__(self, voice: str = "af_bella", language: str = "en", speed: float = 1.0) -> None:
+        """
+        Initialize Kokoro TTS with real voice synthesis.
+        
+        Args:
+            voice: Voice profile to use (af_bella, af_nicole, af_sarah, etc.)
+            language: Language code (en, es, fr, etc.)
+            speed: Speech speed multiplier
+        """
+        self.voice = voice
+        self.language = language
+        self.speed = speed
+        self._kokoro_engine = None
+        self.models_dir = Path.home() / ".kokoro_models"
+        
+        print(f"🎙️ Initializing KokoroTTS with voice: {voice}")
+        
+        # Create models directory
+        self.models_dir.mkdir(exist_ok=True)
+    
+    def _download_kokoro_models(self) -> bool:
+        """Download Kokoro models if they don't exist."""
+        try:
+            model_file = self.models_dir / "kokoro-v0_19.onnx" 
+            voices_file = self.models_dir / "voices.json"
                 print("✅ Kokoro models already exist")
                 return True
             

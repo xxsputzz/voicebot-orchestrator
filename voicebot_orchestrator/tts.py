@@ -73,17 +73,78 @@ class KokoroTTS:
         # Data chunk header
         data_header = b'data' + data_size.to_bytes(4, 'little')
         
-        # Generate simple tone instead of silence (for testing purposes)
+        # Generate speech-like audio pattern instead of a simple tone
         import math
+        import random
         audio_samples = []
-        frequency = 440  # A note (440 Hz)
-        amplitude = 0.1  # Quiet volume for placeholder
         
-        for i in range(num_samples):
-            # Generate a simple sine wave
-            sample_value = int(amplitude * 32767 * math.sin(2 * math.pi * frequency * i / sample_rate))
-            # Convert to 16-bit signed integer, little-endian
-            audio_samples.append(sample_value.to_bytes(2, 'little', signed=True))
+        # Create more natural speech-like patterns
+        words = text.split()
+        syllables_per_word = [max(1, len(word) // 3) for word in words]  # Estimate syllables
+        total_syllables = sum(syllables_per_word)
+        
+        # Speech-like parameters
+        base_frequency = 140  # Base human voice frequency
+        frequency_variation = 60  # How much frequency can vary
+        amplitude = 0.3  # Reasonable volume
+        
+        current_sample = 0
+        for word_idx, word in enumerate(words):
+            syllable_count = syllables_per_word[word_idx]
+            samples_per_syllable = num_samples // (total_syllables + 1)  # +1 to avoid division by zero
+            
+            for syllable in range(syllable_count):
+                # Vary frequency for each syllable to sound more natural
+                syllable_frequency = base_frequency + random.randint(-frequency_variation//2, frequency_variation//2)
+                
+                # Generate samples for this syllable
+                syllable_samples = min(samples_per_syllable, num_samples - current_sample)
+                
+                for i in range(syllable_samples):
+                    if current_sample >= num_samples:
+                        break
+                    
+                    # Create a more complex waveform (fundamental + harmonics)
+                    fundamental = math.sin(2 * math.pi * syllable_frequency * current_sample / sample_rate)
+                    harmonic2 = 0.3 * math.sin(2 * math.pi * syllable_frequency * 2 * current_sample / sample_rate)
+                    harmonic3 = 0.15 * math.sin(2 * math.pi * syllable_frequency * 3 * current_sample / sample_rate)
+                    
+                    # Add envelope (attack, sustain, decay) for more natural sound
+                    envelope = 1.0
+                    if i < syllable_samples * 0.1:  # Attack
+                        envelope = i / (syllable_samples * 0.1)
+                    elif i > syllable_samples * 0.8:  # Decay
+                        envelope = (syllable_samples - i) / (syllable_samples * 0.2)
+                    
+                    # Combine waveforms
+                    combined_wave = (fundamental + harmonic2 + harmonic3) * envelope
+                    sample_value = int(amplitude * 32767 * combined_wave)
+                    
+                    # Clamp to 16-bit range
+                    sample_value = max(-32768, min(32767, sample_value))
+                    
+                    audio_samples.append(sample_value.to_bytes(2, 'little', signed=True))
+                    current_sample += 1
+                
+                # Add brief pause between syllables
+                pause_samples = min(samples_per_syllable // 10, num_samples - current_sample)
+                for i in range(pause_samples):
+                    if current_sample >= num_samples:
+                        break
+                    audio_samples.append((0).to_bytes(2, 'little', signed=True))
+                    current_sample += 1
+            
+            # Add longer pause between words
+            word_pause_samples = min(samples_per_syllable // 5, num_samples - current_sample)
+            for i in range(word_pause_samples):
+                if current_sample >= num_samples:
+                    break
+                audio_samples.append((0).to_bytes(2, 'little', signed=True))
+                current_sample += 1
+        
+        # Fill remaining samples with silence
+        while len(audio_samples) < num_samples:
+            audio_samples.append((0).to_bytes(2, 'little', signed=True))
         
         audio_data = b''.join(audio_samples)
         

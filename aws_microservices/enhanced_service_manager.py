@@ -45,7 +45,7 @@ class EnhancedServiceManager:
             },
             "whisper_stt": {
                 "script": "stt_whisper_service.py",
-                "port": 8002,
+                "port": 8003,
                 "description": "Whisper STT (OpenAI)",
                 "required": False,
                 "type": "stt"
@@ -199,9 +199,16 @@ class EnhancedServiceManager:
             # Start the service process
             if service_name in ["orchestrator", "whisper_stt"]:
                 # For orchestrator and whisper_stt, use --direct flag to run server directly
-                process = subprocess.Popen([
-                    python_exe, str(script_path), "--direct"
-                ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                # Enable stdout/stderr for debugging STT issues
+                if service_name == "whisper_stt":
+                    # Don't capture output for STT service so we can see debug logs
+                    process = subprocess.Popen([
+                        python_exe, str(script_path), "--direct"
+                    ], cwd=project_root)
+                else:
+                    process = subprocess.Popen([
+                        python_exe, str(script_path), "--direct"
+                    ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             else:
                 # For other services, run normally
                 process = subprocess.Popen([
