@@ -14,20 +14,12 @@ from typing import Optional, Union, Literal
 from pathlib import Path
 from enum import Enum
 
-# Add paths for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'tests', 'dia'))
-
-def safe_print(text):
-    """Safe print function that handles Unicode encoding issues on Windows"""
-    try:
-        # First try to replace problematic Unicode characters
-        safe_text = text.replace('🎭', '[TTS]').replace('⏳', '[LOADING]').replace('1️⃣', '[1]').replace('2️⃣', '[2]').replace('✅', '[OK]').replace('❌', '[ERROR]')
-        print(safe_text)
-    except UnicodeEncodeError:
-        # Fallback: remove all non-ASCII characters
-        safe_text = text.encode('ascii', 'ignore').decode('ascii')
-        print(safe_text)
+# Add paths for imports - put dia path FIRST to override system package
+project_root = os.path.dirname(os.path.dirname(__file__))
+dia_path = os.path.join(project_root, 'tests', 'dia')
+# Insert at beginning to override any system dia package
+sys.path.insert(0, dia_path)
+sys.path.append(project_root)
 
 # Import audio utilities
 try:
@@ -40,7 +32,7 @@ class TTSEngine(Enum):
     """Available TTS engines"""
     KOKORO = "kokoro"
     NARI_DIA = "nari_dia"
-    DIA_4BIT = "dia_4bit"  # NEW: Speed-optimized 4-bit Dia
+    DIA_4BIT = "dia_4bit"  # Currently not available but referenced in service
     AUTO = "auto"
 
 class EnhancedTTSManager:
@@ -53,25 +45,23 @@ class EnhancedTTSManager:
     def __init__(self):
         self.kokoro_tts = None
         self.nari_model = None
-        self.dia_4bit_model = None  # NEW: 4-bit Dia model
         self.current_engine = TTSEngine.KOKORO
         self.engines_loaded = {
             TTSEngine.KOKORO: False,
-            TTSEngine.NARI_DIA: False,
-            TTSEngine.DIA_4BIT: False  # NEW: Track 4-bit engine
+            TTSEngine.NARI_DIA: False
         }
         
-        safe_print("[TTS] Initializing Enhanced TTS Manager...")
-        safe_print("   Supports: Kokoro (fast) + Nari Dia (quality) + Dia 4-bit (speed)")
+        print("🎭 Initializing Enhanced TTS Manager...")
+        print("   Supports: Kokoro (fast) + Nari Dia (quality)")
     
-    async def initialize_engines(self, load_kokoro=True, load_nari=True, load_dia_4bit=False):
+    async def initialize_engines(self, load_kokoro=True, load_nari=True):
         """Initialize TTS engines based on requirements"""
-        safe_print("[LOADING] Initializing TTS engines...")
+        print("⏳ Initializing TTS engines...")
         start_time = time.time()
         
         # 1. Initialize Kokoro (fast engine)
         if load_kokoro:
-            safe_print("\n1. Loading Kokoro TTS (Fast Engine)...")
+            print("\n1️⃣ Loading Kokoro TTS (Fast Engine)...")
             try:
                 from voicebot_orchestrator.tts import KokoroTTS
                 
@@ -83,23 +73,18 @@ class EnhancedTTSManager:
                 kokoro_time = time.time() - kokoro_start
                 
                 self.engines_loaded[TTSEngine.KOKORO] = True
-                print(f"   >>> Kokoro loaded and warmed up in {kokoro_time:.2f}s")
-                print(f"   >>> Voice: af_bella (African female)")
-                print(f"   >>> Speed: ~0.8s average generation")
+                print(f"   ✅ Kokoro loaded and warmed up in {kokoro_time:.2f}s")
+                print(f"   🎤 Voice: af_bella (African female)")
+                print(f"   ⚡ Speed: ~0.8s average generation")
                 
             except Exception as e:
-                print(f"   XXX Kokoro failed: {e}")
+                print(f"   ❌ Kokoro failed: {e}")
                 self.engines_loaded[TTSEngine.KOKORO] = False
         
         # 2. Initialize Nari Dia (quality engine) 
         if load_nari and torch.cuda.is_available():
-            print("\n[2] Loading Nari Dia-1.6B (Quality Engine)...")
+            print("\n2️⃣ Loading Nari Dia-1.6B (Quality Engine)...")
             try:
-                # Add the correct path for dia module
-                dia_path = Path(__file__).parent.parent / "tests" / "dia"
-                if dia_path.exists():
-                    sys.path.insert(0, str(dia_path))
-                
                 from dia.model import Dia
                 
                 nari_start = time.time()
@@ -118,83 +103,36 @@ class EnhancedTTSManager:
                 nari_time = time.time() - nari_start
                 
                 self.engines_loaded[TTSEngine.NARI_DIA] = True
-                print(f"   [OK] Nari Dia loaded and warmed up in {nari_time:.2f}s")
+                print(f"   ✅ Nari Dia loaded and warmed up in {nari_time:.2f}s")
                 
                 memory_used = torch.cuda.memory_allocated(0) / 1024**3
-                print(f"   [MIC] Voice: Dialogue-focused adaptive")
-                print(f"   [BRAIN] Quality: Maximum naturalness")
-                print(f"   [CHART] GPU memory: {memory_used:.2f}GB")
-                print(f"   [TIMER] Speed: ~3+ minutes generation")
+                print(f"   🎤 Voice: Dialogue-focused adaptive")
+                print(f"   🧠 Quality: Maximum naturalness")
+                print(f"   📊 GPU memory: {memory_used:.2f}GB")
+                print(f"   ⏳ Speed: ~3+ minutes generation")
                 
             except Exception as e:
-                print(f"   [ERROR] Nari Dia failed: {e}")
+                print(f"   ❌ Nari Dia failed: {e}")
                 self.engines_loaded[TTSEngine.NARI_DIA] = False
-        else:
-            safe_print("\n2️⃣ Nari Dia requires CUDA - skipping")
+                
+        elif load_nari:
+            print("\n2️⃣ Nari Dia requires CUDA - skipping")
             self.engines_loaded[TTSEngine.NARI_DIA] = False
-        
-        # 3. Initialize Dia 4-bit (speed-optimized engine) - NEW
-        if load_dia_4bit and torch.cuda.is_available():
-            print("\n[3] Loading Dia-1.6B-4bit (Speed Engine)...")
-            try:
-                dia_path = Path(__file__).parent.parent / "tests" / "dia"
-                if dia_path.exists():
-                    sys.path.insert(0, str(dia_path))
-                
-                from dia.model import Dia
-                
-                dia_4bit_start = time.time()
-                device = torch.device("cuda")
-                
-                # Load with basic settings first (remove invalid torch_dtype parameter)
-                self.dia_4bit_model = Dia.from_pretrained(
-                    "nari-labs/Dia-1.6B-0626", 
-                    device=device
-                )
-                
-                # Pre-warm with smaller config for speed
-                test_audio = self.dia_4bit_model.generate(
-                    text="[S1] Speed system ready.",
-                    max_tokens=128,  # Smaller for speed
-                    cfg_scale=2.0,
-                    temperature=1.0,
-                    top_p=0.9,
-                    verbose=False
-                )
-                dia_4bit_time = time.time() - dia_4bit_start
-                
-                self.engines_loaded[TTSEngine.DIA_4BIT] = True
-                print(f"   [OK] Dia 4-bit loaded and warmed up in {dia_4bit_time:.2f}s")
-                
-                memory_used = torch.cuda.memory_allocated(0) / 1024**3
-                print(f"   [SPEED] Voice: Dialogue-focused adaptive (4-bit)")
-                print(f"   [BALANCE] Quality: Optimized for speed")
-                print(f"   [CHART] GPU memory: {memory_used:.2f}GB (reduced)")
-                print(f"   [TIMER] Speed: ~30-60s generation (faster)")
-                
-            except Exception as e:
-                print(f"   [ERROR] Dia 4-bit failed: {e}")
-                self.engines_loaded[TTSEngine.DIA_4BIT] = False
-        elif load_dia_4bit:
-            safe_print("\n3️⃣ Dia 4-bit requires CUDA - skipping")
-            self.engines_loaded[TTSEngine.DIA_4BIT] = False
         
         total_time = time.time() - start_time
         
         # Set default engine
         if self.engines_loaded[TTSEngine.KOKORO]:
             self.current_engine = TTSEngine.KOKORO
-        elif self.engines_loaded[TTSEngine.DIA_4BIT]:
-            self.current_engine = TTSEngine.DIA_4BIT
         elif self.engines_loaded[TTSEngine.NARI_DIA]:
             self.current_engine = TTSEngine.NARI_DIA
         else:
-            safe_print("❌ No TTS engines loaded successfully!")
+            print("❌ No TTS engines loaded successfully!")
             return False
         
-        safe_print(f"\n🎉 TTS Manager initialized in {total_time:.2f}s")
-        safe_print(f"🎯 Available engines: {self._get_available_engines()}")
-        safe_print(f"🔧 Default engine: {self.current_engine.value}")
+        print(f"\n🎉 TTS Manager initialized in {total_time:.2f}s")
+        print(f"🎯 Available engines: {self._get_available_engines()}")
+        print(f"🔧 Default engine: {self.current_engine.value}")
         return True
     
     def _get_available_engines(self):
@@ -204,8 +142,6 @@ class EnhancedTTSManager:
             available.append("Kokoro")
         if self.engines_loaded[TTSEngine.NARI_DIA]:
             available.append("Nari-Dia")
-        if self.engines_loaded[TTSEngine.DIA_4BIT]:
-            available.append("Dia-4bit")
         return ", ".join(available) if available else "None"
     
     def set_engine(self, engine: Union[TTSEngine, str]):
@@ -220,23 +156,19 @@ class EnhancedTTSManager:
         old_engine = self.current_engine
         self.current_engine = engine
         
-        safe_print(f"🔄 Switched TTS engine: {old_engine.value} → {engine.value}")
+        print(f"Switched TTS engine: {old_engine.value} -> {engine.value}")
         self._print_engine_info(engine)
     
     def _print_engine_info(self, engine: TTSEngine):
         """Print information about the specified engine"""
         if engine == TTSEngine.KOKORO:
-            safe_print("   🚀 Kokoro TTS - Optimized for real-time conversation")
-            safe_print("   ⚡ Speed: ~0.8s generation")
-            safe_print("   🎤 Voice: af_bella (professional female)")
+            print("   🚀 Kokoro TTS - Optimized for real-time conversation")
+            print("   ⚡ Speed: ~0.8s generation")
+            print("   🎤 Voice: af_bella (professional female)")
         elif engine == TTSEngine.NARI_DIA:
-            safe_print("   🎭 Nari Dia-1.6B - Maximum quality dialogue")
-            safe_print("   ⏳ Speed: ~3+ minutes generation") 
-            safe_print("   🧠 Voice: Adaptive dialogue-focused")
-        elif engine == TTSEngine.DIA_4BIT:
-            safe_print("   ⚡ Dia-1.6B-4bit - Speed-optimized dialogue")
-            safe_print("   🚀 Speed: ~30-60s generation") 
-            safe_print("   🎯 Voice: Adaptive dialogue-focused (optimized)")
+            print("   🎭 Nari Dia-1.6B - Maximum quality dialogue")
+            print("   ⏳ Speed: ~3+ minutes generation") 
+            print("   🧠 Voice: Adaptive dialogue-focused")
     
     def get_current_engine(self) -> TTSEngine:
         """Get current active engine"""
@@ -246,8 +178,51 @@ class EnhancedTTSManager:
         """Get list of available engines"""
         return [engine for engine, loaded in self.engines_loaded.items() if loaded]
     
+    def estimate_tokens_needed(self, text: str) -> tuple[int, float]:
+        """
+        Estimate the number of tokens needed for full audio generation
+        Returns: (estimated_tokens, estimated_duration_seconds)
+        """
+        # Enhanced token estimation based on text analysis
+        char_count = len(text)
+        
+        # Base tokens for initialization
+        base_tokens = 512
+        
+        # Dynamic scaling based on text length and complexity
+        if char_count <= 50:
+            # Very short text
+            tokens_per_char = 4
+            min_tokens = 1024
+        elif char_count <= 200:
+            # Short text
+            tokens_per_char = 6
+            min_tokens = 2048
+        elif char_count <= 500:
+            # Medium text
+            tokens_per_char = 8
+            min_tokens = 4096
+        elif char_count <= 1000:
+            # Long text
+            tokens_per_char = 10
+            min_tokens = 8192
+        else:
+            # Very long text
+            tokens_per_char = 12
+            min_tokens = 16384
+        
+        estimated_tokens = max(min_tokens, char_count * tokens_per_char)
+        
+        # Cap at reasonable maximum
+        estimated_tokens = min(65536, estimated_tokens)
+        
+        # Estimate duration (rough approximation: 1000 tokens ≈ 1 second)
+        estimated_duration = estimated_tokens / 1000
+        
+        return estimated_tokens, estimated_duration
+
     async def generate_speech(self, text: str, engine: Optional[TTSEngine] = None, 
-                             save_path: Optional[str] = None) -> tuple[bytes, float, str]:
+                             save_path: Optional[str] = None, seed: Optional[int] = None) -> tuple[bytes, float, str]:
         """
         Generate speech using specified or current engine
         
@@ -296,19 +271,27 @@ class EnhancedTTSManager:
                 else:
                     formatted_text = text
                 
-                # Use proven working parameters from test_nari_proper.py
-                max_tokens = min(2048, max(256, len(text) * 8))
+                # Use enhanced token estimation
+                estimated_tokens, estimated_duration = self.estimate_tokens_needed(text)
                 
-                print(f"🔄 Generating with {max_tokens} max tokens...")
+                # Handle seed
+                if seed is None:
+                    import random
+                    seed = random.randint(1, 999999)
+                
+                print(f"🎲 Using seed: {seed}")
+                print(f"🔄 Generating with {estimated_tokens} estimated tokens for {len(text)} characters...")
+                print(f"   📊 Expected audio duration: ~{estimated_duration:.1f} seconds")
+                print(f"   🎯 Text preview: \"{text[:100]}{'...' if len(text) > 100 else ''}\"")
                 
                 # Set seed for consistent results
-                torch.manual_seed(42)
+                torch.manual_seed(seed)
                 if torch.cuda.is_available():
-                    torch.cuda.manual_seed(42)
+                    torch.cuda.manual_seed(seed)
                 
                 audio = self.nari_model.generate(
                     text=formatted_text,
-                    max_tokens=max_tokens,
+                    max_tokens=estimated_tokens,
                     cfg_scale=3.0,    # Working parameters from successful test
                     temperature=1.2,  # Working parameters from successful test
                     top_p=0.95,       # Working parameters from successful test
@@ -316,6 +299,21 @@ class EnhancedTTSManager:
                 )
                 
                 generation_time = time.time() - start_time
+                
+                # DEBUG: Check raw model output BEFORE any processing
+                print(f"🔍 RAW MODEL OUTPUT:")
+                print(f"🔍 Audio type: {type(audio)}")
+                print(f"🔍 Audio shape: {audio.shape if hasattr(audio, 'shape') else 'No shape'}")
+                print(f"🔍 Audio dtype: {audio.dtype if hasattr(audio, 'dtype') else 'No dtype'}")
+                if hasattr(audio, 'shape') and len(audio.shape) > 0:
+                    raw_duration = len(audio) / 44100
+                    print(f"🔍 RAW Audio samples: {len(audio)}")
+                    print(f"🔍 RAW Audio duration: {raw_duration:.2f} seconds")
+                    print(f"🔍 Audio min/max: {audio.min():.6f} / {audio.max():.6f}")
+                    print(f"🔍 Audio mean: {audio.mean():.6f}")
+                    print(f"🔍 Non-zero samples: {(audio != 0).sum()}/{len(audio)}")
+                else:
+                    print("🔍 Audio data appears empty or malformed")
                 
                 # Save audio using working method
                 if save_path:
@@ -325,186 +323,106 @@ class EnhancedTTSManager:
                     else:
                         output_path = save_path
                 else:
-                    # Generate timestamped path
+                    # Generate timestamped path with seed
                     if audio_manager:
-                        output_path = audio_manager.get_timestamped_path("output", "nari_dia")
+                        output_path = audio_manager.get_timestamped_path(f"output_seed_{seed}", "nari_dia")
                     else:
                         timestamp = int(time.time() * 1000)
-                        output_path = f"nari_output_{timestamp}.wav"
+                        output_path = f"nari_output_seed_{seed}_{timestamp}.wav"
                 
-                # Use working sample rate and save method
+                # Use working sample rate and save method (from test_nari_proper.py)
                 sample_rate = 44100
                 sf.write(output_path, audio, sample_rate)
+                
+                # DEBUG: Check what actually got saved
+                saved_check_audio, saved_check_sr = sf.read(output_path)
+                saved_check_duration = len(saved_check_audio) / saved_check_sr
+                print(f"🔍 SAVED FILE CHECK:")
+                print(f"🔍 Saved samples: {len(saved_check_audio)}")
+                print(f"🔍 Saved duration: {saved_check_duration:.2f} seconds")
+                print(f"🔍 Saved sample rate: {saved_check_sr} Hz")
+                
+                if abs(len(audio) - len(saved_check_audio)) > 10:
+                    print(f"🚨 TRUNCATION DETECTED IN SAVE!")
+                    print(f"🚨 Original: {len(audio)} samples ({len(audio)/44100:.2f}s)")
+                    print(f"🚨 Saved: {len(saved_check_audio)} samples ({saved_check_duration:.2f}s)")
+                    print(f"🚨 Lost: {len(audio) - len(saved_check_audio)} samples")
                 
                 with open(output_path, 'rb') as f:
                     audio_bytes = f.read()
                 
-                safe_print(f"💾 Saved to: {output_path}")
+                print(f"💾 Saved to: {output_path}")
+                print(f"🔍 Final audio_bytes size: {len(audio_bytes)} bytes")
                 
                 # Calculate audio stats
                 duration = len(audio) / sample_rate
-                safe_print(f"🎵 Audio duration: {duration:.1f}s")
-                safe_print(f"⚡ Realtime factor: {generation_time/duration:.1f}x")
                 
-                return audio_bytes, generation_time, "Nari-Dia"
-            
-            elif engine == TTSEngine.DIA_4BIT and self.dia_4bit_model:
-                # Format text for Dia dialogue format
-                if not text.startswith("[S1]"):
-                    formatted_text = f"[S1] {text}"
-                else:
-                    formatted_text = text
+                # Format generation time as HH:MM:SS
+                gen_hours = int(generation_time // 3600)
+                gen_minutes = int((generation_time % 3600) // 60)
+                gen_seconds = int(generation_time % 60)
+                gen_time_str = f"{gen_hours:02d}:{gen_minutes:02d}:{gen_seconds:02d}"
                 
-                # Use speed-optimized parameters for 4-bit
-                max_tokens = min(1024, max(128, len(text) * 4))  # Smaller for speed
+                print(f"🎵 Audio duration: {duration:.1f}s")
+                print(f"🎲 Used seed: {seed}")
+                print(f"⏱️ Generation time: {gen_time_str}")
+                print(f"⚡ Realtime factor: {generation_time/duration:.1f}x")
                 
-                print(f"🔄 Generating with {max_tokens} max tokens (4-bit mode)...")
-                
-                # Set seed for consistent results
-                torch.manual_seed(42)
-                if torch.cuda.is_available():
-                    torch.cuda.manual_seed(42)
-                
-                audio = self.dia_4bit_model.generate(
-                    text=formatted_text,
-                    max_tokens=max_tokens,
-                    cfg_scale=2.5,    # Slightly lower for speed
-                    temperature=1.0,  # More conservative for speed
-                    top_p=0.9,        # More conservative for speed
-                    verbose=True
-                )
-                
-                generation_time = time.time() - start_time
-                
-                # Save audio using working method
-                if save_path:
-                    if audio_manager and not os.path.isabs(save_path):
-                        output_path = audio_manager.get_audio_path(save_path, "dia_4bit")
-                    else:
-                        output_path = save_path
-                else:
-                    if audio_manager:
-                        output_path = audio_manager.get_timestamped_path("output", "dia_4bit")
-                    else:
-                        timestamp = int(time.time() * 1000)
-                        output_path = f"dia_4bit_output_{timestamp}.wav"
-                
-                # Use working sample rate and save method
-                sample_rate = 44100
-                sf.write(output_path, audio, sample_rate)
-                
-                with open(output_path, 'rb') as f:
-                    audio_bytes = f.read()
-                
-                safe_print(f"💾 Saved to: {output_path}")
-                
-                # Calculate audio stats
-                duration = len(audio) / sample_rate
-                safe_print(f"🎵 Audio duration: {duration:.1f}s")
-                safe_print(f"⚡ Realtime factor: {generation_time/duration:.1f}x")
-                
-                return audio_bytes, generation_time, "Dia-4bit"
+                return audio_bytes, generation_time, f"Nari-Dia-seed-{seed}"
             
             else:
                 raise RuntimeError(f"Engine {engine.value} not properly initialized")
                 
         except Exception as e:
-            safe_print(f"❌ Generation failed with {engine.value}: {e}")
+            print(f"❌ Generation failed with {engine.value}: {e}")
             
             # Try fallback to available engine
             available = [e for e, loaded in self.engines_loaded.items() if loaded and e != engine]
             if available:
                 fallback_engine = available[0]
-                safe_print(f"🔄 Falling back to {fallback_engine.value}...")
+                print(f"🔄 Falling back to {fallback_engine.value}...")
                 return await self.generate_speech(text, fallback_engine, save_path)
             else:
                 raise e
     
     def cleanup(self):
-        """Clean up loaded models and free GPU memory"""
-        safe_print("🧹 Cleaning up TTS engines...")
+        """Clean up loaded models"""
+        print("🧹 Cleaning up TTS engines...")
         
         if self.nari_model:
-            try:
-                # Move model to CPU and delete
-                if hasattr(self.nari_model, 'to'):
-                    self.nari_model.to('cpu')
-                del self.nari_model
-                self.nari_model = None
-                safe_print("✅ Nari Dia model moved to CPU and deleted")
-            except Exception as e:
-                safe_print(f"⚠️ Nari Dia cleanup warning: {e}")
+            del self.nari_model
+            torch.cuda.empty_cache()
+            gc.collect()
+            print("✅ Nari Dia cleaned up")
         
-        if self.dia_4bit_model:
-            try:
-                # Move 4-bit model to CPU and delete
-                if hasattr(self.dia_4bit_model, 'to'):
-                    self.dia_4bit_model.to('cpu')
-                del self.dia_4bit_model
-                self.dia_4bit_model = None
-                safe_print("✅ Dia 4-bit model moved to CPU and deleted")
-            except Exception as e:
-                safe_print(f"⚠️ Dia 4-bit cleanup warning: {e}")
-        
-        if self.kokoro_tts:
-            try:
-                # Clean up Kokoro TTS
-                del self.kokoro_tts
-                self.kokoro_tts = None
-                safe_print("✅ Kokoro TTS deleted")
-            except Exception as e:
-                safe_print(f"⚠️ Kokoro cleanup warning: {e}")
-        
-        # Force GPU memory cleanup
-        try:
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                safe_print("✅ GPU cache cleared and synchronized")
-        except Exception as e:
-            safe_print(f"⚠️ GPU cleanup warning: {e}")
-        
-        # Force garbage collection
-        gc.collect()
-        
-        # Reset engine states
-        self.engines_loaded = {
-            TTSEngine.KOKORO: False,
-            TTSEngine.NARI_DIA: False,
-            TTSEngine.DIA_4BIT: False
-        }
-        self.current_engine = TTSEngine.KOKORO
-        
-        safe_print("✅ TTS Manager cleanup complete")
+        self.kokoro_tts = None
+        print("✅ Kokoro cleaned up")
 
 # CLI Helper Functions
 def get_engine_choice() -> TTSEngine:
     """Interactive engine selection for CLI"""
-    safe_print("\n🎭 Select TTS Engine:")
-    safe_print("1. 🚀 Kokoro (Fast, Real-time) - ~0.8s generation")
-    safe_print("2. 🎭 Nari Dia (Quality, Slow) - ~3+ minutes generation")
-    safe_print("3. ⚡ Dia 4-bit (Speed, Balanced) - ~30-60s generation")
-    safe_print("4. 🤖 Auto (Smart selection based on context)")
+    print("\n🎭 Select TTS Engine:")
+    print("1. 🚀 Kokoro (Fast, Real-time) - ~0.8s generation")
+    print("2. 🎭 Nari Dia (Quality, Slow) - ~3+ minutes generation")
+    print("3. 🤖 Auto (Smart selection based on context)")
     
     while True:
         try:
-            choice = input("\nEnter choice (1-4): ").strip()
+            choice = input("\nEnter choice (1-3): ").strip()
             if choice == "1":
                 return TTSEngine.KOKORO
             elif choice == "2":
                 return TTSEngine.NARI_DIA
             elif choice == "3":
-                return TTSEngine.DIA_4BIT
-            elif choice == "4":
                 return TTSEngine.AUTO
             else:
-                print("❌ Invalid choice. Please enter 1, 2, 3, or 4.")
+                print("❌ Invalid choice. Please enter 1, 2, or 3.")
         except KeyboardInterrupt:
             print("\n👋 Exiting...")
             sys.exit(0)
 
 def smart_engine_selection(text: str, available_engines: list[TTSEngine]) -> TTSEngine:
-    """Automatically select best engine based on context with 4-bit support"""
+    """Automatically select best engine based on context"""
     # If only one engine available, use it
     if len(available_engines) == 1:
         return available_engines[0]
@@ -516,34 +434,16 @@ def smart_engine_selection(text: str, available_engines: list[TTSEngine]) -> TTS
     if text_length < 50 and TTSEngine.KOKORO in available_engines:
         return TTSEngine.KOKORO
     
-    # For medium responses - use 4-bit for balanced speed/quality
-    if text_length < 150:
-        if TTSEngine.DIA_4BIT in available_engines:
-            return TTSEngine.DIA_4BIT
-        elif TTSEngine.KOKORO in available_engines:
-            return TTSEngine.KOKORO
+    # For medium responses - use Kokoro for speed
+    if text_length < 150 and TTSEngine.KOKORO in available_engines:
+        return TTSEngine.KOKORO
     
-    # For longer responses - consider quality vs speed
-    if text_length < 300:
-        # Prefer 4-bit for good balance
-        if TTSEngine.DIA_4BIT in available_engines:
-            return TTSEngine.DIA_4BIT
-        elif TTSEngine.KOKORO in available_engines:
-            return TTSEngine.KOKORO
-    else:
-        # For very long text, use quality engine if available
-        if TTSEngine.NARI_DIA in available_engines:
-            return TTSEngine.NARI_DIA
-        elif TTSEngine.DIA_4BIT in available_engines:
-            return TTSEngine.DIA_4BIT
-    
-    # Fallback priority: Kokoro > DIA_4BIT > NARI_DIA
+    # For long, complex responses - consider quality vs speed tradeoff
+    # In practice, still prefer Kokoro due to Nari Dia's extreme slowness
     if TTSEngine.KOKORO in available_engines:
         return TTSEngine.KOKORO
-    elif TTSEngine.DIA_4BIT in available_engines:
-        return TTSEngine.DIA_4BIT
     
-    # Final fallback to any available engine
+    # Fallback to any available engine
     return available_engines[0]
 
 # Test function

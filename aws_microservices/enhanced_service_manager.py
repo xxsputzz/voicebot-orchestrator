@@ -150,7 +150,7 @@ class EnhancedServiceManager:
             "efficient": {
                 "name": "Efficient Combo",
                 "description": "Orchestrator + Whisper STT + Mistral LLM + Dia 4-bit TTS (Speed optimized)",
-                "services": ["orchestrator", "whisper_stt", "dia_4bit_tts", "mistral_llm"],
+                "services": ["orchestrator", "whisper_stt", "hira_dia_tts", "mistral_llm"],
                 "use_case": "Fast processing with dedicated 4-bit TTS for quick responses and Whisper accuracy"
             },
             "quality": {
@@ -209,6 +209,11 @@ class EnhancedServiceManager:
                     process = subprocess.Popen([
                         python_exe, str(script_path), "--direct"
                     ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            elif service_name == "hira_dia_tts":
+                # Don't capture output for Hira Dia TTS to avoid interfering with model loading
+                process = subprocess.Popen([
+                    python_exe, str(script_path)
+                ], cwd=project_root)
             else:
                 # For other services, run normally
                 process = subprocess.Popen([
@@ -222,13 +227,18 @@ class EnhancedServiceManager:
             }
             
             # Shorter wait for faster UX (reduced from 3 seconds)
+            # But give Hira Dia TTS more time since it needs to load large models
             print("⏳ Waiting for service to start...")
-            time.sleep(2)
+            if service_name == "hira_dia_tts":
+                time.sleep(5)  # Give Hira Dia more time for model loading
+            else:
+                time.sleep(2)
             
             # Check if process is still running
             if process.poll() is None:
                 # Quick health check with short timeout and no cache
-                healthy = self.check_service_health(service_name, timeout=1, use_cache=False)
+                timeout = 3 if service_name == "hira_dia_tts" else 1  # Longer timeout for Hira Dia
+                healthy = self.check_service_health(service_name, timeout=timeout, use_cache=False)
                 # Invalidate cache for this service since status changed
                 self.invalidate_cache(service_name)
                 
@@ -358,8 +368,8 @@ class EnhancedServiceManager:
             print(f"❌ Service script not found: {script_path}")
             return False
         
-        print(f"🚀 Starting {config['description']} in Dia 4-bit mode on port {config['port']}...")
-        print("   Engine: Dia 4-bit (speed optimized)")
+        print(f"🚀 Starting Dedicated Dia 4-bit TTS on port {config['port']}...")
+        print("   Engine: Dia 4-bit (speed optimized, lightweight model)")
         
         try:
             # Get the correct Python executable
@@ -376,11 +386,7 @@ class EnhancedServiceManager:
                 "start_time": time.time()
             }
             
-            # Track engine mode for Hira Dia TTS (default is full mode)
-            if service_name == "hira_dia_tts":
-                self.intended_engine_mode[service_name] = "full"
-            
-            # Track that this service was intended to run in 4-bit mode
+            # Track that this service is intended to run in 4-bit mode
             self.intended_engine_mode[service_name] = "4bit"
             
             # Wait longer to see if it starts successfully (FastAPI startup takes time)
@@ -735,13 +741,12 @@ class EnhancedServiceManager:
                     self.stop_service("hira_dia_tts")
                     time.sleep(2)  # Wait for service to stop
                 
-                # Start directly in Dia 4-bit mode (DISABLED - using dedicated service now)
-                # if self.start_dia_4bit_service():
-                #     success_count += 1
-                #     print("✅ Started TTS service in Dia 4-bit mode")
-                # else:
-                #     print("❌ Failed to start TTS service in Dia 4-bit mode")
-                pass  # This special case is now obsolete
+                # Use the working start_dia_4bit_service method for Dia 8-bit mode  
+                if self.start_dia_4bit_service():
+                    success_count += 1
+                    print("✅ Started TTS service in Dia 4-bit mode")
+                else:
+                    print("❌ Failed to start TTS service in Dia 4-bit mode")
             else:
                 # Regular service start
                 if self.start_service(service_name):
@@ -1024,7 +1029,14 @@ class EnhancedServiceManager:
         running_services = []
         for name, info in status.items():
             if info["status"] == "healthy":
-                service_desc = info["description"]
+                # Use clean service names for the running list
+                clean_name_map = {
+                    "orchestrator": "Orchestrator",
+                    "whisper_stt": "Whisper STT",
+                    "kokoro_tts": "Kokoro TTS",
+                    "mistral_llm": "Mistral LLM",
+                    "gpt_llm": "GPT LLM"
+                }
                 
                 # For Hira Dia TTS, show the actual engine mode
                 if name == "hira_dia_tts":
@@ -1032,11 +1044,13 @@ class EnhancedServiceManager:
                     if engine_status["service_responsive"]:
                         current_engine = engine_status["current_engine"]
                         if current_engine == "dia_4bit":
-                            service_desc = "Unified Hira Dia TTS (Dia 4-bit Mode)"
+                            service_desc = "Dia 4-bit TTS"
                         elif current_engine == "full_dia":
-                            service_desc = "Unified Hira Dia TTS (Full Dia Mode)"
+                            service_desc = "Hira Dia TTS"
                         else:
-                            service_desc = f"Unified Hira Dia TTS ({current_engine})"
+                            service_desc = f"Hira Dia TTS"
+                else:
+                    service_desc = clean_name_map.get(name, name)
                 
                 running_services.append(service_desc)
         

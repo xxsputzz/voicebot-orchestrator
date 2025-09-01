@@ -22,10 +22,87 @@ import requests
 import pyaudio
 import wave
 import threading
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 import traceback
+from contextlib import contextmanager
+
+from contextlib import contextmanager
+
+def chunk_text_intelligently(text: str, max_chunk_size: int = 2800) -> List[str]:
+    """
+    Split text into chunks that respect sentence boundaries and stay under max_chunk_size.
+    Leaves some buffer under the 3000 character limit for safety.
+    """
+    if len(text) <= max_chunk_size:
+        return [text]
+    
+    chunks = []
+    remaining_text = text
+    
+    while remaining_text:
+        if len(remaining_text) <= max_chunk_size:
+            chunks.append(remaining_text.strip())
+            break
+        
+        # Find the best split point (sentence boundary)
+        chunk = remaining_text[:max_chunk_size]
+        
+        # Look for sentence endings (., !, ?) followed by space or newline
+        best_split = -1
+        for i in range(len(chunk) - 1, max(0, len(chunk) - 200), -1):
+            if chunk[i] in '.!?' and i + 1 < len(chunk) and chunk[i + 1] in ' \n\t':
+                best_split = i + 1
+                break
+        
+        # If no sentence boundary found, look for other good split points
+        if best_split == -1:
+            for i in range(len(chunk) - 1, max(0, len(chunk) - 100), -1):
+                if chunk[i] in ',;:' and i + 1 < len(chunk) and chunk[i + 1] in ' \n\t':
+                    best_split = i + 1
+                    break
+        
+        # If still no good split point, look for word boundaries
+        if best_split == -1:
+            for i in range(len(chunk) - 1, max(0, len(chunk) - 50), -1):
+                if chunk[i] == ' ':
+                    best_split = i + 1
+                    break
+        
+        # If no word boundary, just split at max size (shouldn't happen with normal text)
+        if best_split == -1:
+            best_split = max_chunk_size
+        
+        chunks.append(remaining_text[:best_split].strip())
+        remaining_text = remaining_text[best_split:].strip()
+    
+    return [chunk for chunk in chunks if chunk]  # Remove empty chunks
+
+@contextmanager
+def suppress_http_logs():
+    """Temporarily suppress HTTP and service logs during health checks"""
+    # Suppress uvicorn, httpx, and other HTTP-related logs
+    loggers_to_suppress = [
+        'uvicorn.access',
+        'uvicorn.error', 
+        'httpx',
+        'requests.packages.urllib3.connectionpool',
+        'urllib3.connectionpool'
+    ]
+    
+    original_levels = {}
+    try:
+        for logger_name in loggers_to_suppress:
+            logger = logging.getLogger(logger_name)
+            original_levels[logger_name] = logger.level
+            logger.setLevel(logging.WARNING)  # Only show warnings and errors
+        yield
+    finally:
+        # Restore original logging levels
+        for logger_name, original_level in original_levels.items():
+            logging.getLogger(logger_name).setLevel(original_level)
 
 class InteractivePipelineTester:
     """Interactive tester for specific service combinations"""
@@ -110,6 +187,54 @@ class InteractivePipelineTester:
             return None
         finally:
             audio.terminate()
+    
+    def chunk_text_intelligently(self, text: str, max_chars: int = 2900) -> List[str]:
+        """Split text into chunks that respect sentence boundaries"""
+        if len(text) <= max_chars:
+            return [text]
+        
+        chunks = []
+        current_chunk = ""
+        
+        # Split by sentences first (looking for . ! ? followed by space or newline)
+        import re
+        sentences = re.split(r'([.!?]+(?:\s|\n|$))', text)
+        
+        # Recombine sentences with their punctuation
+        sentence_list = []
+        for i in range(0, len(sentences) - 1, 2):
+            if i + 1 < len(sentences):
+                sentence_list.append(sentences[i] + sentences[i + 1])
+            else:
+                sentence_list.append(sentences[i])
+        
+        for sentence in sentence_list:
+            # If adding this sentence would exceed the limit
+            if len(current_chunk) + len(sentence) > max_chars:
+                if current_chunk:  # Save current chunk if it has content
+                    chunks.append(current_chunk.strip())
+                    current_chunk = sentence
+                else:
+                    # Single sentence too long - split by words
+                    words = sentence.split()
+                    temp_chunk = ""
+                    for word in words:
+                        if len(temp_chunk) + len(word) + 1 <= max_chars:
+                            temp_chunk += (" " if temp_chunk else "") + word
+                        else:
+                            if temp_chunk:
+                                chunks.append(temp_chunk.strip())
+                            temp_chunk = word
+                    if temp_chunk:
+                        current_chunk = temp_chunk
+            else:
+                current_chunk += (" " if current_chunk else "") + sentence
+        
+        # Add the last chunk
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks
         
     def check_service_health(self, service_name: str, endpoint: str) -> bool:
         """Check if a service is running and healthy"""
@@ -141,13 +266,14 @@ class InteractivePipelineTester:
         
         available = {}
         
-        for service_name, config in self.all_services.items():
-            endpoint = config["url"]
-            if self.check_service_health(service_name, endpoint):
-                available[service_name] = config
-                print(f"  ✅ {service_name:<20} - {endpoint}")
-            else:
-                print(f"  ❌ {service_name:<20} - Not available")
+        with suppress_http_logs():  # Suppress INFO logs during health checks
+            for service_name, config in self.all_services.items():
+                endpoint = config["url"]
+                if self.check_service_health(service_name, endpoint):
+                    available[service_name] = config
+                    print(f"  ✅ {service_name:<20} - {endpoint}")
+                else:
+                    print(f"  ❌ {service_name:<20} - Not available")
         
         self.available_services = available
         
@@ -156,6 +282,22 @@ class InteractivePipelineTester:
     
     def select_services_by_type(self, service_type: str) -> Optional[str]:
         """Let user select a service of specific type"""
+        # If no services detected at all, try to find them in the config
+        if not self.available_services:
+            print(f"💡 Attempting to find available {service_type.upper()} services...")
+            potential_services = {name: config for name, config in self.all_services.items() 
+                                if config["type"] == service_type}
+            
+            # Quick check if any are available
+            for service_name, config in potential_services.items():
+                if self.check_service_health(service_name, config["url"]):
+                    self.available_services[service_name] = config
+                    print(f"✅ Found and selected {service_type.upper()}: {service_name}")
+                    return service_name
+            
+            print(f"❌ No {service_type.upper()} services are running")
+            return None
+        
         available_of_type = {name: config for name, config in self.available_services.items() 
                            if config["type"] == service_type}
         
@@ -367,7 +509,7 @@ class InteractivePipelineTester:
             
             print(f"🔄 Sending to TTS: {tts_endpoint}")
             
-            tts_response = requests.post(f"{tts_endpoint}/synthesize", json=tts_data, timeout=60)
+            tts_response = requests.post(f"{tts_endpoint}/synthesize", json=tts_data, timeout=120)  # Increased for Nari Dia
             if tts_response.status_code == 200:
                 tts_result = tts_response.json()
                 audio_data = tts_result.get("audio_base64")
@@ -394,6 +536,258 @@ class InteractivePipelineTester:
                 
         except Exception as e:
             print(f"❌ LLM→TTS test failed: {e}")
+            traceback.print_exc()
+            return False
+    
+    async def test_typed_text_to_tts(self, tts_service: str) -> bool:
+        """Test direct text input to TTS with unlimited timeout and custom options"""
+        print(f"\n🎤 Testing Typed Text → {tts_service}")
+        print("-" * 50)
+        
+        try:
+            # Multi-line text input with full preview and editing capability
+            print("📝 Enter your text for TTS synthesis:")
+            print("   💡 Instructions:")
+            print("      - Paste or type your text (unlimited length)")
+            print("      - Press Enter after each line")
+            print("      - Type 'DONE' on a new line when finished")
+            print("      - Type 'CANCEL' to cancel")
+            print("      - Leave empty and type 'DONE' for default text")
+            print()
+            
+            lines = []
+            line_count = 1
+            
+            print("📖 Enter your text (type 'DONE' when finished):")
+            
+            while True:
+                try:
+                    line = input(f"Line {line_count:2d}: ")
+                    
+                    if line.strip().upper() == "DONE":
+                        break
+                    elif line.strip().upper() == "CANCEL":
+                        print("❌ Cancelled by user")
+                        return False
+                    else:
+                        lines.append(line)
+                        line_count += 1
+                        
+                except KeyboardInterrupt:
+                    print("\n❌ Input cancelled.")
+                    return False
+                except EOFError:
+                    break
+            
+            # Handle the text input
+            if not lines:
+                text_input = "Hello! This is a test of the text-to-speech system with unlimited character support. You can paste or type as much text as you want, and the system will generate high-quality speech from it. How does this sound?"
+                print(f"\n📝 Using default text")
+            else:
+                text_input = "\n".join(lines)  # Preserve line breaks
+                print(f"\n📝 Text entered successfully!")
+            
+            # Show complete text for review
+            char_count = len(text_input)
+            word_count = len(text_input.split())
+            line_count = len(text_input.split('\n'))
+            
+            print(f"\n� Text Statistics:")
+            print(f"   📏 Length: {char_count:,} characters")
+            print(f"   📝 Words: {word_count:,}")
+            print(f"   📄 Lines: {line_count:,}")
+            
+            print(f"\n📖 Complete Text Preview:")
+            print("-" * 60)
+            print(text_input)
+            print("-" * 60)
+            
+            # Confirm before processing
+            while True:
+                confirm = input(f"\n✅ Process this text? (y/n/edit): ").strip().lower()
+                if confirm in ['y', 'yes']:
+                    break
+                elif confirm in ['n', 'no']:
+                    print("❌ Cancelled by user")
+                    return False
+                elif confirm in ['e', 'edit']:
+                    print("📝 Edit mode not implemented yet. Please restart text entry.")
+                    return False
+                else:
+                    print("❌ Please enter 'y' (yes), 'n' (no), or 'edit'")
+            
+            if len(text_input) > 10000:  # Warn for very long text
+                print(f"\n⚠️  Large text detected ({len(text_input):,} characters)")
+                print(f"   This may take several minutes to generate")
+                continue_choice = input("   Continue? (y/n): ").strip().lower()
+                if continue_choice not in ['y', 'yes']:
+                    print("❌ Cancelled by user")
+                    return False
+            
+            # Optional seed setting
+            seed_input = input("\n🎲 Enter random seed (leave empty for random): ").strip()
+            if seed_input:
+                try:
+                    seed = int(seed_input)
+                    print(f"   🎲 Using seed: {seed}")
+                except ValueError:
+                    import random
+                    seed = random.randint(1, 999999)
+                    print(f"   🎲 Invalid seed, using random: {seed}")
+            else:
+                import random
+                seed = random.randint(1, 999999)
+                print(f"   🎲 Using random seed: {seed}")
+            
+            # Optional quality setting
+            quality_choice = input("\nHigh quality mode? (y/n, default=y): ").strip().lower()
+            high_quality = quality_choice in ['', 'y', 'yes']
+            
+            # Optional speed setting  
+            speed_input = input("Speech speed (0.5-2.0, default=1.0): ").strip()
+            try:
+                speed = float(speed_input) if speed_input else 1.0
+                speed = max(0.5, min(speed, 2.0))  # Clamp between 0.5 and 2.0
+            except ValueError:
+                speed = 1.0
+            
+            print(f"\n🔄 Sending to TTS: {self.available_services[tts_service]['url']}")
+            print(f"   📊 Text length: {len(text_input)} characters")
+            print(f"   🎯 High quality: {high_quality}")
+            print(f"   ⚡ Speed: {speed}x")
+            print(f"   🎲 Seed: {seed}")
+            print(f"   ⏳ No timeout limit - will wait for completion")
+            
+            # Prepare TTS request
+            tts_endpoint = self.available_services[tts_service]["url"]
+            print(f"\n🔄 Sending to TTS: {tts_endpoint}")
+            print(f"   📊 Text length: {len(text_input)} characters")
+            print(f"   🎯 High quality: {high_quality}")
+            print(f"   ⚡ Speed: {speed}x")
+            print(f"   ⏳ No timeout limit - will wait for completion")
+            
+            # Check if text needs chunking for Dia TTS
+            if len(text_input) > 3000:
+                print(f"\n📄 Text is {len(text_input)} characters - chunking for Dia TTS (max 3000 chars)")
+                chunks = self.chunk_text_intelligently(text_input, max_chars=2900)
+                print(f"   ✂️  Split into {len(chunks)} chunks")
+                
+                audio_files = []
+                total_generation_time = 0
+                
+                for i, chunk in enumerate(chunks, 1):
+                    print(f"\n🎵 Generating chunk {i}/{len(chunks)} ({len(chunk)} chars)...")
+                    
+                    chunk_data = {
+                        "text": chunk,
+                        "high_quality": high_quality,
+                        "speed": speed,
+                        "return_audio": True
+                    }
+                    
+                    start_time = time.time()
+                    chunk_response = requests.post(f"{tts_endpoint}/synthesize", json=chunk_data, timeout=None)
+                    chunk_time = time.time() - start_time
+                    total_generation_time += chunk_time
+                    
+                    print(f"   ⏱️ Chunk {i} completed in {chunk_time:.1f} seconds")
+                    
+                    if chunk_response.status_code == 200:
+                        chunk_result = chunk_response.json()
+                        chunk_audio = chunk_result.get("audio_base64")
+                        
+                        if chunk_audio:
+                            # Save individual chunk
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            safe_text = "".join(c for c in text_input[:30] if c.isalnum() or c in ' -_').strip()
+                            safe_text = "_".join(safe_text.split())
+                            chunk_filename = f"chunk_{i:02d}_of_{len(chunks):02d}_{safe_text}_{tts_service}_{timestamp}.wav"
+                            chunk_filepath = self.audio_dir / chunk_filename
+                            
+                            chunk_audio_bytes = base64.b64decode(chunk_audio)
+                            with open(chunk_filepath, "wb") as f:
+                                f.write(chunk_audio_bytes)
+                            
+                            audio_files.append(chunk_filepath)
+                            print(f"   ✅ Chunk {i} saved: {chunk_filename}")
+                        else:
+                            print(f"   ❌ No audio data for chunk {i}")
+                            return False
+                    else:
+                        print(f"   ❌ Chunk {i} failed: {chunk_response.status_code}")
+                        print(f"   Response: {chunk_response.text}")
+                        return False
+                
+                print(f"\n🎉 All chunks generated in {total_generation_time:.1f} seconds total")
+                print(f"📁 Generated {len(audio_files)} audio files:")
+                
+                total_size = 0
+                for audio_file in audio_files:
+                    file_size = audio_file.stat().st_size
+                    total_size += file_size
+                    print(f"   📦 {audio_file.name} ({file_size:,} bytes)")
+                
+                print(f"\n📊 Total audio size: {total_size:,} bytes ({total_size/1024:.1f} KB)")
+                print(f"💡 You can combine these files with audio editing software if needed")
+                
+                return True
+            
+            else:
+                # Single chunk processing (original logic)
+                tts_data = {
+                    "text": text_input,
+                    "high_quality": high_quality,
+                    "speed": speed,
+                    "seed": seed,
+                    "return_audio": True
+                }
+                
+                # Send TTS request with no timeout limit
+                start_time = time.time()
+                print(f"\n🎵 Generating speech... (this may take a while for longer text)")
+                
+                tts_response = requests.post(f"{tts_endpoint}/synthesize", json=tts_data, timeout=None)  # No timeout!
+                
+                generation_time = time.time() - start_time
+                print(f"⏱️ Generation completed in {generation_time:.1f} seconds")
+                
+                if tts_response.status_code == 200:
+                    tts_result = tts_response.json()
+                    audio_data = tts_result.get("audio_base64")
+                    duration = tts_result.get("duration", "unknown")
+                    
+                    if audio_data:
+                        # Save audio file with descriptive name
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        # Create safe filename from first few words
+                        safe_text = "".join(c for c in text_input[:30] if c.isalnum() or c in ' -_').strip()
+                        safe_text = "_".join(safe_text.split())
+                        filename = f"custom_text_{safe_text}_seed_{seed}_{tts_service}_{timestamp}.wav"
+                        filepath = self.audio_dir / filename
+                        
+                        audio_bytes = base64.b64decode(audio_data)
+                        with open(filepath, "wb") as f:
+                            f.write(audio_bytes)
+                        
+                        print(f"✅ Audio saved: {filename}")
+                        print(f"📊 Audio duration: {duration} seconds")
+                        print(f"📁 Saved to: {filepath}")
+                        
+                        # Optional: Play audio info
+                        file_size = len(audio_bytes)
+                        print(f"📦 File size: {file_size:,} bytes ({file_size/1024:.1f} KB)")
+                        
+                        return True
+                    else:
+                        print(f"❌ No audio data received from TTS")
+                        return False
+                else:
+                    print(f"❌ TTS request failed: {tts_response.status_code}")
+                    print(f"   Response: {tts_response.text}")
+                    return False
+                
+        except Exception as e:
+            print(f"❌ Typed Text→TTS test failed: {e}")
             traceback.print_exc()
             return False
     
@@ -528,7 +922,7 @@ class InteractivePipelineTester:
             
             print(f"🔄 Step 2 - TTS Synthesis: {tts_endpoint}")
             
-            tts_response = requests.post(f"{tts_endpoint}/synthesize", json=tts_data, timeout=60)
+            tts_response = requests.post(f"{tts_endpoint}/synthesize", json=tts_data, timeout=120)  # Increased for Nari Dia
             if tts_response.status_code == 200:
                 tts_result = tts_response.json()
                 audio_data = tts_result.get("audio_base64")
@@ -559,16 +953,333 @@ class InteractivePipelineTester:
             traceback.print_exc()
             return False
     
-    async def run_interactive_tests(self):
-        """Run interactive test menu"""
-        print("🎯 Interactive Pipeline Tester")
-        print("=" * 50)
+    async def test_direct_dia_tts(self) -> bool:
+        """Test direct Dia TTS model with EOS analysis and optimizations"""
+        print("\n🎯 Direct Dia TTS Test with EOS Analysis")
+        print("-" * 50)
         
-        # Detect available services
-        available = self.detect_available_services()
-        if not available:
-            print("❌ No services are available. Start some services first.")
-            return
+        try:
+            import sys
+            import os
+            import torch
+            import soundfile as sf
+            import time
+            import numpy as np
+            import random
+            from datetime import datetime
+            import gc
+            
+            # Check if we're in the right directory for Dia
+            current_dir = os.getcwd()
+            tests_dia_path = os.path.join(current_dir, "tests", "dia")
+            
+            if not os.path.exists(tests_dia_path):
+                print(f"❌ Dia model directory not found: {tests_dia_path}")
+                print(f"   Current directory: {current_dir}")
+                print(f"   Please run from the main Orkestra directory")
+                return False
+            
+            # Apply GPU optimizations
+            print("🚀 Applying GPU optimizations...")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.backends.cudnn.benchmark = True
+                torch.backends.cudnn.deterministic = False
+                torch.cuda.set_per_process_memory_fraction(0.7)
+                print("   ✅ GPU optimizations applied")
+            else:
+                print("   ⚠️ CUDA not available, using CPU")
+            
+            # Load Dia model
+            print("📥 Loading Dia model...")
+            original_dir = os.getcwd()
+            os.chdir(tests_dia_path)
+            
+            sys.path.insert(0, tests_dia_path)
+            from dia.model import Dia
+            
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            
+            # Load model with memory management
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            model = Dia.from_pretrained("nari-labs/Dia-1.6B-0626", device=device)
+            print(f"✅ Model loaded on {device}")
+            
+            # Show GPU status
+            if torch.cuda.is_available():
+                gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                gpu_allocated = torch.cuda.memory_allocated(0) / 1024**3
+                gpu_reserved = torch.cuda.memory_reserved(0) / 1024**3
+                print(f"📊 GPU Memory: {gpu_allocated:.1f}GB allocated, {gpu_reserved:.1f}GB reserved of {gpu_memory:.1f}GB total")
+            
+            # Get user input for text
+            print("\n📝 TEXT INPUT")
+            print("=" * 30)
+            print("Enter your text (type 'DONE' on a new line to finish):")
+            print("Or press Enter for default Alex/Payoff Debt text")
+            
+            user_lines = []
+            first_line = input("> ").strip()
+            
+            if first_line == "":
+                # Use default text
+                test_text = """Hello, hello! This is Alex calling with Finally Payoff Debt, your pre-qualification specialist. (laughs) I'm so glad you picked up today. (clears throat) I promise this will be quick, and helpful.
+Here's the news: We've rolled out new income-based loan options to help people escape high-interest credit cards and personal loans. (sighs) You know the ones—you pay and pay, but the balance never drops.
+Now, listen… (gasps) if you've got steady income, we can help you qualify for a personal loan between ten thousand and one hundred thousand dollars. (coughs) That means instead of juggling multiple bills, you could roll them into one easy payment."""
+                print("📖 Using default Alex/Payoff Debt text")
+            elif first_line.upper() == "DONE":
+                print("❌ No text entered!")
+                return False
+            else:
+                user_lines.append(first_line)
+                
+                while True:
+                    line = input("> ").strip()
+                    if line.upper() == "DONE":
+                        break
+                    user_lines.append(line)
+                
+                test_text = "\n".join(user_lines)
+                print(f"📖 Custom text entered ({len(user_lines)} lines)")
+            
+            # Format and show text
+            formatted_text = f"[S1] {test_text.replace('→', '->')}"  # Unicode fix + Dia format
+            print(f"\n📊 Text Analysis:")
+            print(f"   Characters: {len(test_text)}")
+            print(f"   Lines: {test_text.count(chr(10)) + 1}")
+            print(f"   Words (approx): {len(test_text.split())}")
+            
+            # Get user input for seed
+            print("\n🎲 SEED SELECTION")
+            print("=" * 30)
+            seed_input = input("Enter seed number (or press Enter for random): ").strip()
+            
+            if seed_input == "":
+                user_seed = random.randint(1000, 99999)
+                print(f"🎲 Random seed generated: {user_seed}")
+            else:
+                try:
+                    user_seed = int(seed_input)
+                    print(f"🎲 Using seed: {user_seed}")
+                except ValueError:
+                    print("❌ Invalid seed, using random")
+                    user_seed = random.randint(1000, 99999)
+                    print(f"🎲 Random seed generated: {user_seed}")
+            
+            # Get token count preference with realistic time estimates
+            print("\n🔧 TOKEN CONFIGURATION")
+            print("=" * 30)
+            print("Available options (with realistic time estimates):")
+            print("1. 🚀 Quick test (2048 tokens ~ 10-12 minutes)")
+            print("2. ⚖️ Medium test (8192 tokens ~ 40-48 minutes)")
+            print("3. 🎯 Long test (16384 tokens ~ 80-96 minutes)")
+            print("4. 🎨 Custom amount")
+            print("5. 💡 Speed test (1024 tokens ~ 5-6 minutes)")
+            
+            choice = input("Choose option (1-5, default=1 for speed): ").strip()
+            
+            if choice == "1" or choice == "":
+                token_count = 2048
+                est_minutes = 11
+                print("🚀 Quick test selected")
+            elif choice == "2":
+                token_count = 8192
+                est_minutes = 44
+                print("⚖️ Medium test selected")
+                confirm = input(f"⚠️ This will take ~{est_minutes} minutes. Continue? (y/N): ").strip().lower()
+                if confirm != 'y':
+                    token_count = 2048
+                    est_minutes = 11
+                    print("🚀 Switched to quick test")
+            elif choice == "3":
+                token_count = 16384
+                est_minutes = 88
+                print("🎯 Long test selected")
+                confirm = input(f"⚠️ This will take ~{est_minutes} minutes. Continue? (y/N): ").strip().lower()
+                if confirm != 'y':
+                    token_count = 2048
+                    est_minutes = 11
+                    print("🚀 Switched to quick test")
+            elif choice == "4":
+                custom_tokens = input("Enter custom token count (512-65536): ").strip()
+                try:
+                    token_count = int(custom_tokens)
+                    if token_count < 512:
+                        print("⚠️ Minimum 512 tokens")
+                        token_count = 512
+                    elif token_count > 65536:
+                        print("⚠️ Maximum 65536 tokens")
+                        token_count = 65536
+                    
+                    # Estimate time: ~295 seconds per 1000 tokens (based on recent tests)
+                    est_minutes = (token_count / 1000) * 295 / 60
+                    
+                    if est_minutes > 30:
+                        confirm = input(f"⚠️ Custom test will take ~{est_minutes:.0f} minutes. Continue? (y/N): ").strip().lower()
+                        if confirm != 'y':
+                            token_count = 2048
+                            est_minutes = 11
+                            print("🚀 Switched to quick test")
+                    
+                    print(f"🎨 Custom test: {token_count} tokens (~{est_minutes:.0f} minutes)")
+                except ValueError:
+                    print("❌ Invalid token count, using quick test")
+                    token_count = 2048
+                    est_minutes = 11
+            elif choice == "5":
+                token_count = 1024
+                est_minutes = 5
+                print("💡 Speed test selected")
+            else:
+                token_count = 2048
+                est_minutes = 11
+                print("🚀 Default quick test selected")
+            
+            print(f"\n⏱️ ESTIMATED TIME: ~{est_minutes} minutes")
+            
+            # Final confirmation for longer tests
+            if est_minutes > 15:
+                confirm = input(f"\n⚠️ This will take approximately {est_minutes} minutes. Continue? (y/N): ").strip().lower()
+                if confirm != 'y':
+                    print("❌ Test cancelled by user")
+                    return False
+            
+            # Set seed and run generation
+            print(f"\n🔄 STARTING GENERATION")
+            print("=" * 50)
+            
+            torch.manual_seed(user_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(user_seed)
+            
+            print(f"📊 Configuration:")
+            print(f"   Seed: {user_seed}")
+            print(f"   Tokens: {token_count}")
+            print(f"   Expected time: ~{est_minutes} minutes")
+            
+            print(f"\n🔄 Generating audio with GPU optimizations...")
+            start_time = time.time()
+            
+            try:
+                with torch.no_grad():  # Save memory
+                    audio = model.generate(
+                        text=formatted_text,
+                        max_tokens=token_count,
+                        cfg_scale=3.0,
+                        temperature=1.2,
+                        top_p=0.95,
+                        verbose=True  # Shows EOS analysis
+                    )
+                
+                generation_time = time.time() - start_time
+                
+                # Clear cache after generation
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                
+                # Analyze results
+                if hasattr(audio, 'shape') and len(audio.shape) > 0:
+                    actual_duration = len(audio) / 44100
+                    samples = len(audio)
+                    
+                    # Format times
+                    gen_hours = int(generation_time // 3600)
+                    gen_minutes = int((generation_time % 3600) // 60)
+                    gen_seconds = int(generation_time % 60)
+                    gen_time_str = f"{gen_hours:02d}:{gen_minutes:02d}:{gen_seconds:02d}"
+                    
+                    print(f"\n📊 RESULTS:")
+                    print(f"   🎵 Generated duration: {actual_duration:.2f} seconds")
+                    print(f"   🔢 Audio samples: {samples:,}")
+                    print(f"   ⏱️ Generation time: {gen_time_str}")
+                    print(f"   🎯 Tokens used: {token_count}")
+                    print(f"   📈 Performance: {token_count/generation_time:.1f} tokens/sec")
+                    print(f"   ⚡ Efficiency: {actual_duration/generation_time:.3f} audio_sec/gen_sec")
+                    
+                    # Save file in the audio directory
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"direct_dia_seed_{user_seed}_tokens_{token_count}_{timestamp}.wav"
+                    
+                    # Change back to original directory for saving
+                    os.chdir(original_dir)
+                    filepath = self.audio_dir / filename
+                    sf.write(filepath, audio, 44100)
+                    print(f"   💾 Saved: {filename}")
+                    
+                    # Quality analysis
+                    max_amplitude = np.max(np.abs(audio))
+                    rms = np.sqrt(np.mean(audio**2))
+                    
+                    if rms > 0.15:
+                        voice_type = "Strong/Confident"
+                    elif rms > 0.10:
+                        voice_type = "Normal/Balanced"
+                    else:
+                        voice_type = "Soft/Quiet"
+                    
+                    print(f"   🎭 Voice character: {voice_type}")
+                    print(f"   🔉 Audio quality: Max={max_amplitude:.3f}, RMS={rms:.3f}")
+                    
+                    # Performance comparison with estimate
+                    time_ratio = generation_time / (est_minutes * 60)
+                    
+                    if time_ratio < 0.8:
+                        print(f"   🚀 Faster than expected! ({time_ratio:.2f}x estimated)")
+                    elif time_ratio > 1.2:
+                        print(f"   🐌 Slower than expected ({time_ratio:.2f}x estimated)")
+                    else:
+                        print(f"   ✅ Performance as expected ({time_ratio:.2f}x estimated)")
+                    
+                    # EOS Analysis summary
+                    expected_duration = token_count / 1000
+                    efficiency_ratio = actual_duration / expected_duration if expected_duration > 0 else 0
+                    
+                    print(f"\n🔚 EOS ANALYSIS SUMMARY:")
+                    print(f"   📊 Token efficiency: {token_count} tokens → {actual_duration:.1f}s audio")
+                    print(f"   📈 Audio/token ratio: {efficiency_ratio:.2f}x expected")
+                    
+                    if efficiency_ratio < 0.5:
+                        print(f"   📉 Early EOS detected - audio shorter than expected")
+                    elif efficiency_ratio > 1.5:
+                        print(f"   📈 Extended generation - audio longer than expected")
+                    else:
+                        print(f"   ✅ Normal EOS behavior - audio length as expected")
+                    
+                    print(f"\n✅ Direct Dia TTS test completed successfully!")
+                    print(f"   🎵 Audio file: {filename}")
+                    print(f"   📊 Duration: {actual_duration:.2f}s")
+                    print(f"   🎭 Voice: {voice_type}")
+                    
+                    return True
+                    
+                else:
+                    print(f"   ❌ No audio generated")
+                    return False
+            
+            except KeyboardInterrupt:
+                print(f"\n⚠️ Generation interrupted by user")
+                return False
+            except Exception as e:
+                print(f"   ❌ Generation failed: {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+                
+        except Exception as e:
+            print(f"❌ Direct Dia TTS test failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            # Restore original directory
+            try:
+                os.chdir(original_dir)
+            except:
+                pass
+    
+    async def run_interactive_tests(self):
+        """Run interactive test menu without automatic service checks"""
+        print("🎯 Interactive Pipeline Tester")
         
         while True:
             print("\n" + "="*50)
@@ -577,12 +1288,14 @@ class InteractivePipelineTester:
             print("1. Test STT → LLM (select specific services)")
             print("2. Test LLM → TTS (select specific services)")
             print("3. Test Full Pipeline STT → LLM → TTS")
-            print("4. Re-check service availability")
-            print("5. Show available services")
+            print("4. Test Typed Text → TTS (custom text input)")
+            print("5. Check service availability")
+            print("6. Show available services")
+            print("7. Test Direct Dia TTS (with EOS analysis)")
             print("0. Exit")
             
             try:
-                choice = input("\nSelect test type (0-5): ").strip()
+                choice = input("\nSelect test type (0-7): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -590,6 +1303,8 @@ class InteractivePipelineTester:
                 
                 elif choice == "1":
                     print("\n🎙️ STT → LLM Test")
+                    # Check services first for this test
+                    self.detect_available_services()
                     stt_service = self.select_services_by_type("stt")
                     if not stt_service:
                         continue
@@ -603,6 +1318,8 @@ class InteractivePipelineTester:
                 
                 elif choice == "2":
                     print("\n🧠 LLM → TTS Test")
+                    # Check services first for this test
+                    self.detect_available_services()
                     llm_service = self.select_services_by_type("llm")
                     if not llm_service:
                         continue
@@ -616,6 +1333,8 @@ class InteractivePipelineTester:
                 
                 elif choice == "3":
                     print("\n🎯 Full Pipeline Test")
+                    # Check services first for this test
+                    self.detect_available_services()
                     stt_service = self.select_services_by_type("stt")
                     if not stt_service:
                         continue
@@ -631,22 +1350,50 @@ class InteractivePipelineTester:
                     print(f"\n📊 Result: {result}")
                 
                 elif choice == "4":
-                    self.detect_available_services()
+                    print("\n🎤 Typed Text → TTS Test")
+                    # Direct to TTS service selection without any service checks
+                    tts_service = self.select_services_by_type("tts")
+                    if not tts_service:
+                        print("❌ No TTS services available. Use option 5 to check service status.")
+                        continue
+                    
+                    success = await self.test_typed_text_to_tts(tts_service)
+                    result = "✅ SUCCESS" if success else "❌ FAILED"
+                    print(f"\n📊 Result: {result}")
                 
                 elif choice == "5":
-                    print("\n📋 Available Services:")
+                    print("\n� Checking service availability...")
+                    self.detect_available_services()
+                    print("\n�📋 Available Services:")
                     if not self.available_services:
-                        print("  No services available")
+                        print("  ❌ No services available")
                     else:
                         for service_name, config in self.available_services.items():
                             service_type = config["type"].upper()
                             url = config["url"]
                             print(f"  ✅ {service_name:<20} ({service_type:<3}) - {url}")
                 
-                else:
-                    print("❌ Invalid choice. Please enter 0-5.")
+                elif choice == "6":
+                    print("\n📋 Available Services:")
+                    if not self.available_services:
+                        print("  ❌ No services detected (use option 5 to check)")
+                        print("  💡 Use option 5 to check service availability first")
+                    else:
+                        for service_name, config in self.available_services.items():
+                            service_type = config["type"].upper()
+                            url = config["url"]
+                            print(f"  ✅ {service_name:<20} ({service_type:<3}) - {url}")
                 
-                if choice in ["1", "2", "3"]:
+                elif choice == "7":
+                    print("\n🎯 Direct Dia TTS Test with EOS Analysis")
+                    success = await self.test_direct_dia_tts()
+                    result = "✅ SUCCESS" if success else "❌ FAILED"
+                    print(f"\n📊 Result: {result}")
+                
+                else:
+                    print("❌ Invalid choice. Please enter 0-7.")
+                
+                if choice in ["1", "2", "3", "4", "7"]:
                     input("\nPress Enter to continue...")
                     
             except KeyboardInterrupt:

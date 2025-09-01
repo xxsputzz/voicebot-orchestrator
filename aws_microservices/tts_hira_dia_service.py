@@ -17,8 +17,52 @@ from typing import Dict, Any, Optional, Literal
 import time
 import sys
 import os
+import re
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from voicebot_orchestrator.enhanced_tts_manager import EnhancedTTSManager, TTSEngine
+
+def purge_all_emojis_comprehensive(text: str) -> str:
+    """
+    Remove ALL emoji and unicode characters that could cause encoding issues.
+    Simply removes emojis without text replacement to preserve sentence meaning.
+    """
+    if not text:
+        return ""
+    
+    # Step 1: Remove numbered emojis (1️⃣, 2️⃣, etc.)
+    cleaned_text = re.sub(r'[0-9]️⃣', '', text)
+    
+    # Step 2: Remove ALL emoji characters using Unicode ranges
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F700-\U0001F77F"  # alchemical symbols
+        "\U0001F780-\U0001F7FF"  # Geometric Shapes Extended
+        "\U0001F800-\U0001F8FF"  # Supplemental Arrows-C
+        "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+        "\U0001FA00-\U0001FA6F"  # Chess Symbols
+        "\U0001FA70-\U0001FAFF"  # Symbols and Pictographs Extended-A
+        "\U00002702-\U000027B0"  # Dingbats
+        "\U000024C2-\U0001F251"  # Enclosed characters
+        "]+"
+    )
+    cleaned_text = emoji_pattern.sub('', cleaned_text)
+    
+    # Step 3: NUCLEAR OPTION - Remove any remaining high Unicode characters
+    # Keep only ASCII printable characters and basic punctuation
+    cleaned_text = re.sub(r'[^\x20-\x7E\r\n\t]', '', cleaned_text)
+    
+    # Step 4: Clean up extra whitespace
+    cleaned_text = ' '.join(cleaned_text.split())
+    
+    # Step 5: Ensure we still have meaningful text
+    if not cleaned_text.strip() or len(cleaned_text.strip()) < 2:
+        cleaned_text = "Text contains unsupported characters and has been sanitized."
+    
+    return cleaned_text
 
 app = FastAPI(title="Unified Hira Dia TTS Microservice", version="2.0.0-unified")
 
@@ -37,6 +81,7 @@ class SynthesizeRequest(BaseModel):
     text: str
     voice: Optional[str] = "default"
     speed: Optional[float] = 1.0
+    seed: Optional[int] = None  # Random seed for voice generation
     output_format: Optional[str] = "wav"
     return_audio: Optional[bool] = True
     high_quality: Optional[bool] = True  # True = Full Dia, False = 4-bit Dia
@@ -79,46 +124,43 @@ async def startup_event():
         
         # Initialize only the requested engine for efficiency and strict mode
         if engine_mode == "4bit":
-            # Only load 4-bit engine
+            # Only load 4-bit engine (use nari=True for any Dia engine)
             await tts_service.initialize_engines(
                 load_kokoro=False,     # Disable Kokoro
-                load_nari=False,       # Disable Full Dia
-                load_dia_4bit=True     # Only 4-bit Dia
+                load_nari=True         # Load Nari Dia engine
             )
         elif engine_mode == "full":
             # Only load full engine
             await tts_service.initialize_engines(
                 load_kokoro=False,     # Disable Kokoro
-                load_nari=True,        # Only Full Dia
-                load_dia_4bit=False    # Disable 4-bit Dia
+                load_nari=True         # Load Nari Dia engine
             )
         else:
             # Auto mode - load both for flexibility
             await tts_service.initialize_engines(
                 load_kokoro=False,     # Disable Kokoro
-                load_nari=True,        # Full Dia model
-                load_dia_4bit=True     # 4-bit Dia model
+                load_nari=True         # Load Nari Dia engine
             )
         
         # Set initial engine based on startup parameter - STRICT MODE
         available_engines = tts_service.get_available_engines()
         logging.info(f"[DEBUG] Requested engine mode: {engine_mode}")
         logging.info(f"[DEBUG] Available engines: {available_engines}")
-        logging.info(f"[DEBUG] DIA_4BIT enum value: {TTSEngine.DIA_4BIT}")
-        logging.info(f"[DEBUG] Is DIA_4BIT in available? {TTSEngine.DIA_4BIT in available_engines}")
+        logging.info(f"[DEBUG] NARI_DIA enum value: {TTSEngine.NARI_DIA}")
+        logging.info(f"[DEBUG] Is NARI_DIA in available? {TTSEngine.NARI_DIA in available_engines}")
         
         if engine_mode == "4bit":
-            # STRICT: If 4-bit was requested, it MUST be available
-            if TTSEngine.DIA_4BIT in available_engines:
-                tts_service.set_engine(TTSEngine.DIA_4BIT)
-                logging.info("[INIT] Starting in Dia 4-bit mode (speed optimized)")
+            # STRICT: Use NARI_DIA for 4-bit mode (clean version doesn't distinguish)
+            if TTSEngine.NARI_DIA in available_engines:
+                tts_service.set_engine(TTSEngine.NARI_DIA)
+                logging.info("[INIT] Starting in Dia mode (using NARI_DIA)")
             else:
                 # FAIL COMPLETELY - don't fall back to Full Dia
-                error_msg = "[ERROR] Dia 4-bit mode was requested but failed to load. Service will not start with fallback."
+                error_msg = "[ERROR] Dia mode was requested but NARI_DIA failed to load. Service will not start with fallback."
                 logging.error(error_msg)
-                logging.error("    💡 Check the Dia 4-bit engine loading errors above")
-                logging.error("    🔧 Fix the torch_dtype issue in EnhancedTTSManager")
-                raise Exception("Dia 4-bit engine unavailable - requested mode cannot be satisfied")
+                logging.error("    [INFO] Check the NARI_DIA engine loading errors above")
+                logging.error("    [CONFIG] Fix the engine loading issue in EnhancedTTSManager")
+                raise Exception("NARI_DIA engine unavailable - requested mode cannot be satisfied")
                 
         elif engine_mode == "full":
             # For full mode, require Full Dia engine
@@ -145,9 +187,10 @@ async def startup_event():
         
         logging.info("[OK] Unified Hira Dia TTS Microservice ready!")
         if TTSEngine.NARI_DIA in available_engines:
-            logging.info("    ✅ Full Dia (NARI_DIA) - Maximum quality")
-        if TTSEngine.DIA_4BIT in available_engines:
-            logging.info("    ✅ 4-bit Dia (DIA_4BIT) - Speed optimized")
+            logging.info("    [OK] Full Dia (NARI_DIA) - Maximum quality")
+        # TODO: Add DIA_4BIT support when available
+        # if TTSEngine.DIA_4BIT in available_engines:
+        #     logging.info("    [OK] 4-bit Dia (DIA_4BIT) - Speed optimized")
         
     except Exception as e:
         logging.error(f"[ERROR] Unified Dia TTS initialization failed: {e}")
@@ -208,9 +251,9 @@ async def shutdown_event():
                 torch.cuda.synchronize()
             gc.collect()
             tts_service = None
-            logging.info("🛑 Hira Dia TTS Microservice shutdown complete")
+            logging.info("[STOP] Hira Dia TTS Microservice shutdown complete")
         except Exception as e:
-            logging.error(f"⚠️ Cleanup warning: {e}")
+            logging.error(f"[WARNING] Cleanup warning: {e}")
 
 @app.get("/health")
 async def health_check():
@@ -227,7 +270,7 @@ async def health_check():
     
     available_engines = []
     if tts_service:
-        available_engines = [e.value for e in tts_service.get_available_engines() if e in [TTSEngine.NARI_DIA, TTSEngine.DIA_4BIT]]
+        available_engines = [e.value for e in tts_service.get_available_engines() if e in [TTSEngine.NARI_DIA]]
     
     return {
         "status": "healthy",
@@ -255,6 +298,13 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
     start_time = time.time()
     
     try:
+        # AGGRESSIVE EMOJI PURGING - Remove ALL emojis from LLM output
+        original_text = request.text
+        request.text = purge_all_emojis_comprehensive(request.text)
+        
+        if request.text != original_text:
+            logging.info(f"[EMOJI_PURGE] Text sanitized: '{original_text[:50]}...' -> '{request.text[:50]}...'")
+        
         # Validate input
         if not request.text or len(request.text.strip()) == 0:
             raise HTTPException(status_code=400, detail="Text input cannot be empty")
@@ -281,7 +331,8 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
         # Generate speech
         audio_bytes, gen_time, used_engine = await tts_service.generate_speech(
             text=request.text,
-            engine=selected_engine
+            engine=selected_engine,
+            seed=request.seed
         )
         
         total_time = time.time() - start_time
@@ -294,6 +345,9 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
             quality_level = "optimized"
             performance_note = "Speed-optimized synthesis"
         
+        # Get token estimation for metadata
+        estimated_tokens, estimated_duration = tts_service.estimate_tokens_needed(request.text) if hasattr(tts_service, 'estimate_tokens_needed') else (0, 0)
+        
         # Prepare response
         metadata = {
             "processing_time_seconds": round(total_time, 3),
@@ -303,7 +357,9 @@ async def synthesize_speech(request: SynthesizeRequest) -> SynthesizeResponse:
             "text_length": len(request.text),
             "audio_size_bytes": len(audio_bytes),
             "estimated_duration_seconds": len(audio_bytes) / 32000,
+            "estimated_tokens": estimated_tokens,
             "voice": request.voice,
+            "seed": request.seed,
             "quality": quality_level,
             "performance": performance_note,
             "service": "unified_hira_dia",
@@ -405,13 +461,21 @@ async def synthesize_to_file(request: SynthesizeRequest):
         raise HTTPException(status_code=503, detail="Unified Dia TTS service not ready")
     
     try:
+        # AGGRESSIVE EMOJI PURGING - Remove ALL emojis from LLM output
+        original_text = request.text
+        request.text = purge_all_emojis_comprehensive(request.text)
+        
+        if request.text != original_text:
+            logging.info(f"[EMOJI_PURGE_FILE] Text sanitized: '{original_text[:50]}...' -> '{request.text[:50]}...'")
+        
         # Smart engine selection for file synthesis
         selected_engine = _select_engine(request)
         
         # Generate audio using selected engine
         audio_bytes, gen_time, used_engine = await tts_service.generate_speech(
             text=request.text,
-            engine=selected_engine
+            engine=selected_engine,
+            seed=request.seed
         )
         
         # Return as audio file
