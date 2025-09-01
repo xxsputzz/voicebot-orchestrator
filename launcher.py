@@ -407,7 +407,7 @@ async def main():
             choice = input("Enter your choice (0-18): ").strip()
             
             if choice == "0":
-                print("\n👋 Goodbye!")
+                print("\n👋 Goodbye!\n")
                 break
             elif choice == "1":
                 launch_enhanced_service_manager()
@@ -467,9 +467,9 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        print("\n👋 Goodbye!\n")
     except asyncio.CancelledError:
-        print("\n👋 Goodbye!")
+        print("\n👋 Goodbye!\n")
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")
-        print("👋 Goodbye!")
+        print("👋 Goodbye!\n")

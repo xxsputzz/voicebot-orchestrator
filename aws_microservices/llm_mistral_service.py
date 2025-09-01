@@ -17,8 +17,49 @@ import time
 # Import your existing LLM implementation
 import sys
 import os
+import re
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from voicebot_orchestrator.enhanced_llm import EnhancedMistralLLM
+
+# EMOJI PURGING: Comprehensive emoji detection and removal (matching GPT service)
+def _purge_emojis_from_llm_response(text: str) -> str:
+    """
+    Remove all emojis from LLM responses to prevent TTS encoding issues.
+    Simply removes emojis without text replacement to preserve sentence meaning.
+    """
+    if not text:
+        return text
+    
+    # Nuclear emoji removal - comprehensive Unicode ranges
+    # Remove ALL emojis without any text replacement
+    emoji_patterns = [
+        r'[\U0001F600-\U0001F64F]',  # Emoticons
+        r'[\U0001F300-\U0001F5FF]',  # Misc Symbols
+        r'[\U0001F680-\U0001F6FF]',  # Transport
+        r'[\U0001F1E0-\U0001F1FF]',  # Country flags
+        r'[\U00002600-\U000027BF]',  # Misc symbols
+        r'[\U0001F900-\U0001F9FF]',  # Supplemental Symbols
+        r'[\U00002702-\U000027B0]',  # Dingbats
+        r'[\U000024C2-\U0001F251]',  # Various symbols
+        r'[\U0001F170-\U0001F171]',  # Enclosed alphanumerics
+        r'[\U0001F17E-\U0001F17F]',  # More enclosed
+        r'[\U0001F18E]',             # Negative squared
+        r'[\U0001F191-\U0001F19A]',  # Squared symbols
+        r'[\U0001F201-\U0001F202]',  # Squared katakana
+        r'[\U0001F21A]',             # Squared CJK
+        r'[\U0001F22F]',             # Squared finger
+        r'[\U0001F232-\U0001F23A]',  # Squared CJK symbols
+        r'[\U0001F250-\U0001F251]',  # Circled ideographs
+        r'[\U0000FE0F]',             # Variation selector (fixed escape)
+        r'[\U0000200D]',             # Zero width joiner
+    ]
+    for pattern in emoji_patterns:
+        text = re.sub(pattern, '', text)
+    
+    # Clean up extra spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
 
 app = FastAPI(title="Mistral LLM Microservice", version="1.0.0")
 
@@ -146,6 +187,12 @@ async def generate_response(request: GenerateRequest) -> GenerateResponse:
             use_cache=request.use_cache,
             domain_context=request.domain_context
         )
+        
+        # EMOJI PURGING: Remove emojis from LLM response to prevent TTS encoding issues
+        original_response = response
+        response = _purge_emojis_from_llm_response(response)
+        if response != original_response:
+            logging.info(f"[EMOJI_PURGE_LLM] Cleaned emoji from Mistral LLM response")
         
         processing_time = time.time() - start_time
         

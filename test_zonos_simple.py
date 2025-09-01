@@ -26,11 +26,33 @@ async def test_zonos_tts_simple():
         print(f"✅ Service status: {health_data.get('status', 'unknown')}")
         print(f"   Version: {health_data.get('version', 'unknown')}")
         
-        # Get voices
+        # Get voices with details
         voices_response = requests.get(f"{zonos_url}/voices", timeout=5)
+        detailed_response = requests.get(f"{zonos_url}/voices_detailed", timeout=5)
+        
         if voices_response.status_code == 200:
             voices = voices_response.json()
             print(f"🎭 Available voices: {', '.join(voices[:5])}... ({len(voices)} total)")
+            
+            # Show detailed voice info if available
+            if detailed_response.status_code == 200:
+                detailed_data = detailed_response.json()
+                voice_details = detailed_data.get('voices', {})
+                
+                print(f"\n🎤 Voice Details (first 5):")
+                count = 0
+                for category, voice_dict in voice_details.items():
+                    for voice_name, info in voice_dict.items():
+                        if voice_name in voices and count < 5:
+                            gender = info.get('gender', '').title()
+                            style = info.get('style', '').replace('_', ' ').title()
+                            accent = info.get('accent', '').title()
+                            print(f"   {voice_name:<12} | {gender:<7} | {style:<15} | {accent}")
+                            count += 1
+                        if count >= 5:
+                            break
+                    if count >= 5:
+                        break
         else:
             voices = ['default']
             print("⚠️ Using default voice")

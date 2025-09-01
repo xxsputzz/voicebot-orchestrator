@@ -33,6 +33,7 @@ class TTSEngine(Enum):
     KOKORO = "kokoro"
     NARI_DIA = "nari_dia"
     DIA_4BIT = "dia_4bit"  # Currently not available but referenced in service
+    ZONOS = "zonos"  # High-quality neural TTS
     AUTO = "auto"
 
 class EnhancedTTSManager:

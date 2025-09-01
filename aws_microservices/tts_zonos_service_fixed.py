@@ -22,19 +22,13 @@ import os
 # Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-# Try to import clean Zonos implementation, fallback to real Zonos, then placeholder
+# Try to import real Zonos implementation, fallback to placeholder
 try:
-    from voicebot_orchestrator.clean_zonos_tts import CleanZonosTTS as ZonosTTS
-    print("[OK] Using Clean Zonos TTS implementation with artifact removal")
+    from voicebot_orchestrator.real_zonos_tts import RealZonosTTS as ZonosTTS
+    print("[OK] Using Real Zonos TTS implementation with neural speech")
     USING_REAL_ZONOS = True
 except ImportError as e:
-    print(f"[WARNING] Clean Zonos not available ({e}), trying Real Zonos")
-    try:
-        from voicebot_orchestrator.real_zonos_tts import RealZonosTTS as ZonosTTS
-        print("[OK] Using Real Zonos TTS implementation with neural speech")
-        USING_REAL_ZONOS = True
-    except ImportError as e2:
-        print(f"[WARNING] Real Zonos not available ({e2}), using Edge-TTS directly")
+    print(f"[WARNING] Real Zonos not available ({e}), using Edge-TTS directly")
     try:
         # Try direct Edge-TTS import
         import edge_tts
@@ -416,57 +410,110 @@ async def get_status():
 
 @app.get("/voices")
 async def get_available_voices():
-    """Get all available voices - returns actual Microsoft Edge Neural Voice names"""
-    # Always return actual Microsoft Edge Neural Voice names instead of fallback categories
-    return [
-        "jenny", "aria", "michelle", "sara", "nancy", "jane", "libby", "sonia",  # Female
-        "guy", "davis", "andrew", "brian", "jason", "tony", "christopher", "ryan",  # Male  
-        "default", "professional", "conversational", "narrative"  # Aliases
-    ]
+    """Get all available voices - returns simple list for compatibility"""
+    if not tts_engine:
+        # Return simple list of voice names for compatibility
+        female_voices = ["jenny", "aria", "michelle", "sara", "nancy", "jane", "libby", "sonia"]
+        male_voices = ["guy", "davis", "andrew", "brian", "jason", "tony", "christopher", "ryan", "thomas"]
+        all_voices = female_voices + male_voices + ["default", "professional", "conversational", "narrative"]
+        return all_voices
+    
+    # Get comprehensive options from TTS engine
+    try:
+        options = tts_engine.get_available_options()
+        # Flatten voices structure for compatibility
+        all_voices = []
+        if "voices" in options and isinstance(options["voices"], dict):
+            for category, voice_list in options["voices"].items():
+                if isinstance(voice_list, dict):
+                    all_voices.extend(voice_list.keys())
+                elif isinstance(voice_list, list):
+                    all_voices.extend(voice_list)
+        
+        # Add aliases if available
+        if "aliases" in options and isinstance(options["aliases"], dict):
+            all_voices.extend(options["aliases"].keys())
+        
+        return list(set(all_voices)) if all_voices else ["default"]
+        
+    except (AttributeError, Exception) as e:
+        logging.warning(f"Error getting voices: {e}")
+        # Fallback simple list
+        return ["female", "male", "neutral", "default"]
 
 @app.get("/voices_detailed")
 async def get_detailed_voices():
     """Get detailed voice information with categories and descriptions"""
-    # Return proper Microsoft Edge Neural Voice names with detailed info
-    return {
-        "voices": {
-            "female": {
-                "jenny": {"gender": "Female", "style": "Professional", "accent": "US", "description": "Clear, authoritative"},
-                "aria": {"gender": "Female", "style": "Conversational", "accent": "US", "description": "Friendly, warm"},
-                "michelle": {"gender": "Female", "style": "Business", "accent": "US", "description": "Professional, mature"},
-                "sara": {"gender": "Female", "style": "Storytelling", "accent": "US", "description": "Calm, soothing"},
-                "nancy": {"gender": "Female", "style": "Educational", "accent": "US", "description": "Clear, instructional"},
-                "jane": {"gender": "Female", "style": "Energetic", "accent": "US", "description": "Upbeat, dynamic"},
-                "libby": {"gender": "Female", "style": "Elegant", "accent": "UK", "description": "British, sophisticated"},
-                "sonia": {"gender": "Female", "style": "Professional", "accent": "UK", "description": "British, warm"}
+    if not tts_engine:
+        # Return proper Microsoft Edge Neural Voice names
+        return {
+            "voices": {
+                "female": {
+                    "jenny": {"model": "en-US-JennyNeural", "description": "Professional, clear", "accent": "US"},
+                    "aria": {"model": "en-US-AriaNeural", "description": "Conversational, friendly", "accent": "US"},
+                    "michelle": {"model": "en-US-MichelleNeural", "description": "Authoritative, business", "accent": "US"},
+                    "sara": {"model": "en-US-SaraNeural", "description": "Calm, soothing", "accent": "US"},
+                    "nancy": {"model": "en-US-NancyNeural", "description": "Warm, storytelling", "accent": "US"},
+                    "jane": {"model": "en-US-JaneNeural", "description": "Energetic, upbeat", "accent": "US"},
+                    "libby": {"model": "en-GB-LibbyNeural", "description": "British, elegant", "accent": "UK"},
+                    "sonia": {"model": "en-GB-SoniaNeural", "description": "British, professional", "accent": "UK"}
+                },
+                "male": {
+                    "guy": {"model": "en-US-GuyNeural", "description": "Professional, authoritative", "accent": "US"},
+                    "davis": {"model": "en-US-DavisNeural", "description": "Conversational, friendly", "accent": "US"},
+                    "andrew": {"model": "en-US-AndrewNeural", "description": "Narrative, storytelling", "accent": "US"},
+                    "brian": {"model": "en-US-BrianNeural", "description": "Calm, measured", "accent": "US"},
+                    "jason": {"model": "en-US-JasonNeural", "description": "Energetic, dynamic", "accent": "US"},
+                    "tony": {"model": "en-US-TonyNeural", "description": "Warm, approachable", "accent": "US"},
+                    "christopher": {"model": "en-US-ChristopherNeural", "description": "Authoritative, commanding", "accent": "US"},
+                    "ryan": {"model": "en-GB-RyanNeural", "description": "British, sophisticated", "accent": "UK"},
+                    "thomas": {"model": "en-GB-ThomasNeural", "description": "British, professional", "accent": "UK"}
+                },
+                "aliases": {
+                    "default": "aria",
+                    "professional": "jenny", 
+                    "conversational": "aria",
+                    "narrative": "andrew"
+                }
             },
-            "male": {
-                "guy": {"gender": "Male", "style": "Professional", "accent": "US", "description": "Authoritative, business"},
-                "davis": {"gender": "Male", "style": "Conversational", "accent": "US", "description": "Friendly, casual"},
-                "andrew": {"gender": "Male", "style": "Narrative", "accent": "US", "description": "Storytelling, mature"},
-                "brian": {"gender": "Male", "style": "Measured", "accent": "US", "description": "Calm, thoughtful"},
-                "jason": {"gender": "Male", "style": "Energetic", "accent": "US", "description": "Dynamic, enthusiastic"},
-                "tony": {"gender": "Male", "style": "Warm", "accent": "US", "description": "Approachable, friendly"},
-                "christopher": {"gender": "Male", "style": "Commanding", "accent": "US", "description": "Authoritative, strong"},
-                "ryan": {"gender": "Male", "style": "Sophisticated", "accent": "UK", "description": "British, refined"}
+            "emotions": [
+                "neutral", "happy", "excited", "calm", "sad", "angry", 
+                "thoughtful", "conversational", "professional", "warm"
+            ],
+            "models": ["zonos-v1", "zonos-v2", "zonos-lite"],
+            "count": 17,
+            "service": "zonos_tts",
+            "engine": "Microsoft Edge Neural TTS",
+            "note": "Professional Microsoft Edge Neural Voices with proper documentation names"
+        }
+    
+    # Get comprehensive options from TTS engine
+    try:
+        options = tts_engine.get_available_options()
+        return {
+            "voices": options["voices"],
+            "emotions": options["emotions"],
+            "speaking_styles": options["speaking_styles"],
+            "output_formats": options["output_formats"],
+            "sample_rates": options["sample_rates"],
+            "speed_range": options["speed_range"],
+            "pitch_range": options["pitch_range"],
+            "count": sum(len(voices) for voices in options["voices"].values()),
+            "service": "zonos_tts",
+            "note": "Comprehensive TTS options with advanced controls"
+        }
+    except AttributeError:
+        # Fallback for older TTS engine versions
+        return {
+            "voices": {
+                "female": ["sophia", "aria", "luna", "emma", "zoe", "maya"],
+                "male": ["default", "professional", "conversational", "narrative"],
+                "neutral": ["alex", "casey"]
             },
-            "aliases": {
-                "default": {"maps_to": "aria", "gender": "Female", "style": "Default", "accent": "US"},
-                "professional": {"maps_to": "jenny", "gender": "Female", "style": "Professional", "accent": "US"}, 
-                "conversational": {"maps_to": "davis", "gender": "Male", "style": "Conversational", "accent": "US"},
-                "narrative": {"maps_to": "andrew", "gender": "Male", "style": "Narrative", "accent": "US"}
-            }
-        },
-        "emotions": [
-            "neutral", "happy", "excited", "calm", "sad", "angry", 
-            "thoughtful", "conversational", "professional", "warm"
-        ],
-        "models": ["zonos-v1", "zonos-v2", "zonos-lite"],
-        "count": 16,
-        "service": "zonos_tts",
-        "engine": "Microsoft Edge Neural TTS",
-        "note": "Professional Microsoft Edge Neural Voices"
-    }
+            "count": 14,
+            "service": "zonos_tts",
+            "note": "Basic voice options (legacy mode)"
+        }
 
 @app.get("/models")
 async def get_available_models():

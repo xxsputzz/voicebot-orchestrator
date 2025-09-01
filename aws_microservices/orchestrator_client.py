@@ -6,6 +6,7 @@ import asyncio
 import aiohttp
 import logging
 import time
+import re
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 import json
@@ -150,6 +151,12 @@ class MicroservicesOrchestrator:
             
             response_text = llm_result["response"]
             self.logger.info(f"💬 Response: '{response_text[:100]}{'...' if len(response_text) > 100 else ''}'")
+            
+            # EMOJI PURGING: Clean LLM response before sending to TTS
+            original_response = response_text
+            response_text = self._purge_emojis_for_tts(response_text)
+            if response_text != original_response:
+                self.logger.info(f"🧹 Emoji purged from LLM response for TTS safety")
             
             # Step 3: Text-to-Speech
             self.logger.info(f"🎭 Step 3: Converting text to speech ({tts_engine})...")
@@ -297,6 +304,63 @@ class MicroservicesOrchestrator:
                 info[name] = {"error": str(e)}
         
         return info
+    
+    def _purge_emojis_for_tts(self, text: str) -> str:
+        """
+        Remove ALL emojis from LLM response before sending to TTS
+        This prevents Unicode encoding errors in TTS processing
+        """
+        if not text:
+            return ""
+        
+        # Replace common emojis with text equivalents
+        emoji_replacements = {
+            '🎤': 'microphone', '🎵': 'music', '🎶': 'notes', '🔊': 'speaker', '🎧': 'headphones',
+            '📢': 'announcement', '📣': 'megaphone', '✅': 'yes', '❌': 'no', '⚠️': 'warning',
+            '🚀': 'rocket', '🔥': 'fire', '💡': 'idea', '🎭': 'theater', '⏳': 'waiting',
+            '🔍': 'search', '📊': 'chart', '📈': 'trending up', '📉': 'trending down',
+            '💰': 'money', '🏦': 'bank', '💳': 'credit card', '💵': 'dollar', '📱': 'phone',
+            '💻': 'computer', '🌐': 'internet', '🔒': 'secure', '🔓': 'unlock', '🎯': 'target',
+            '🔄': 'refresh', '🔧': 'settings', '🎉': 'celebration', '🧹': 'cleanup',
+            '🏥': 'hospital', '🧠': 'brain', '⚡': 'lightning', '🛑': 'stop', '👋': 'hello',
+            '🤖': 'robot', '💬': 'chat', '📝': 'note', '📤': 'send', '📥': 'receive', '🔔': 'notification'
+        }
+        
+        # Replace known emojis first
+        cleaned_text = text
+        for emoji, replacement in emoji_replacements.items():
+            cleaned_text = cleaned_text.replace(emoji, replacement)
+        
+        # Remove ALL remaining emoji characters using Unicode ranges
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F1E0-\U0001F1FF"  # flags
+            "\U0001F300-\U0001F5FF"  # symbols & pictographs
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F680-\U0001F6FF"  # transport & map
+            "\U0001F700-\U0001F77F"  # alchemical
+            "\U0001F780-\U0001F7FF"  # geometric shapes
+            "\U0001F800-\U0001F8FF"  # arrows
+            "\U0001F900-\U0001F9FF"  # supplemental symbols
+            "\U0001FA00-\U0001FA6F"  # chess symbols
+            "\U0001FA70-\U0001FAFF"  # symbols extended
+            "\U00002702-\U000027B0"  # dingbats
+            "\U000024C2-\U0001F251"  # enclosed characters
+            "]+"
+        )
+        cleaned_text = emoji_pattern.sub('', cleaned_text)
+        
+        # NUCLEAR OPTION: Remove any remaining high Unicode characters
+        cleaned_text = re.sub(r'[^\x20-\x7E\r\n\t]', '', cleaned_text)
+        
+        # Clean up extra whitespace
+        cleaned_text = ' '.join(cleaned_text.split())
+        
+        # Ensure we still have meaningful text
+        if not cleaned_text.strip() or len(cleaned_text.strip()) < 2:
+            cleaned_text = "Response contains unsupported characters and has been sanitized."
+        
+        return cleaned_text
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Get orchestrator performance metrics"""

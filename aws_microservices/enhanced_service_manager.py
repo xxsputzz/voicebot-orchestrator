@@ -73,6 +73,13 @@ class EnhancedServiceManager:
                 "required": False,
                 "type": "tts"
             },
+            "zonos_tts": {
+                "script": "tts_zonos_service.py",
+                "port": 8014,
+                "description": "Zonos TTS (High-Quality Neural)",
+                "required": False,
+                "type": "tts"
+            },
             "mistral_llm": {
                 "script": "llm_mistral_service.py",
                 "port": 8021,
@@ -627,91 +634,37 @@ class EnhancedServiceManager:
     
     def show_status(self):
         """Show current status of all services with improved formatting"""
-        print("\n📊 Service Status:")
-        print("-" * 60)
-        print("🔍 Searching for service status...")
+        print("\n" + "=" * 40)
+        print("🔍 Checking Service Status...")
+        print("=" * 40)
         
         status = self.get_service_status(fast_mode=True)
-        print("✅ Status check complete!")
-        print()
         
-        for service_name, info in status.items():
-            status_icon = {
-                "healthy": "✅",
-                "unhealthy": "⚠️",
-                "crashed": "❌", 
-                "stopped": "⏹️"
-            }.get(info["status"], "❓")
-            
-            # Extract service name without descriptive text for cleaner display
-            clean_name = info['description']
-            
-            # Clean up service names for consistent display
-            service_name_map = {
-                "orchestrator": "Orchestrator",
-                "whisper_stt": "Whisper STT", 
-                "kokoro_tts": "Kokoro TTS",
-                "hira_dia_tts": "Hira Dia TTS",  # Default, may be overridden below
-                "mistral_llm": "Mistral LLM",
-                "gpt_llm": "GPT LLM"
-            }
-            
-            # Use mapped name if available, otherwise clean the description
-            if service_name in service_name_map:
-                clean_name = service_name_map[service_name]
+        # Define service order with proper names
+        service_order = [
+            ("orchestrator", "Main Orchestrator"),
+            ("whisper_stt", "Whisper STT"),
+            ("kokoro_tts", "Kokoro TTS"),
+            ("hira_dia_tts", "Hira Dia TTS"),
+            ("zonos_tts", "Zonos TTS"),
+            ("mistral_llm", "Mistral LLM"),
+            ("gpt_llm", "GPT LLM")
+        ]
+        
+        for service_key, display_name in service_order:
+            if service_key in status:
+                info = status[service_key]
+                status_icon = {
+                    "healthy": "✅",
+                    "unhealthy": "⚠️",
+                    "crashed": "❌", 
+                    "stopped": "❌"
+                }.get(info["status"], "❓")
                 
-                # Special handling for Hira Dia TTS based on intended engine mode
-                if service_name == "hira_dia_tts":
-                    intended_mode = self.intended_engine_mode.get(service_name, "full")
-                    if intended_mode == "4bit":
-                        clean_name = "Dia 4-bit TTS"
-                    else:
-                        clean_name = "Hira Dia TTS"
-            else:
-                # Fallback: clean the description text
-                clean_name = clean_name.replace(" Service", "").replace(" (OpenAI)", "").replace(" (Fast)", "").replace(" (High Quality)", "")
-                clean_name = clean_name.replace(" (Quality)", "").replace(" (Speed)", "").replace("🎭 ", "").replace("⚡ ", "")
-                clean_name = clean_name.replace(" (Quality + Speed)", "").replace("(FastAPI)", "").replace("Unified ", "")
-            
-            # Format with aligned columns
-            port_text = f"(Port {info['port']}):"
-            status_text = info['status']
-            
-            # Add managed indicator only for healthy services
-            if info["status"] == "healthy":
-                managed_indicator = " (Managed)" if info.get("managed", False) else " (Independent)"
-                status_text += managed_indicator
-            
-            # Align columns: Service name (25 chars), Port (15 chars), Status
-            print(f"  {status_icon}  {clean_name:<23} {port_text:<15} {status_text}")
-            
-            # Show uptime for healthy managed services
-            if info["status"] == "healthy" and "uptime" in info and info.get("managed", False):
-                uptime_min = info["uptime"] / 60
-                print(f"      ⏱️   Uptime: {uptime_min:.1f} minutes")
-            
-            # Show engine status for Hira Dia TTS if healthy
-            if service_name == "hira_dia_tts" and info["status"] == "healthy":
-                engine_status = self.get_hira_dia_engine_status()
-                if engine_status["service_responsive"]:
-                    current_engine = engine_status["current_engine"]
-                    intended_mode = self.intended_engine_mode.get(service_name, "full")
-                    
-                    # Map engine names to display format
-                    engine_display_map = {
-                        "nari_dia": "🎭 Full Dia (Quality)",
-                        "dia_4bit": "⚡ 4-bit Dia (Speed)",
-                        "auto": "🤖 Auto Selection"
-                    }
-                    
-                    current_display = engine_display_map.get(current_engine, f"❓ {current_engine}")
-                    
-                    # Show warning if intended mode differs from actual mode
-                    if intended_mode == "4bit" and current_engine != "dia_4bit":
-                        print(f"      🔧  Engine: {current_display}")
-                        print(f"      ⚠️   Intended: ⚡ 4-bit Dia (fallback to Full Dia due to loading issues)")
-                    else:
-                        print(f"      🔧  Engine: {current_display}")
+                port = info["port"]
+                service_status = "Running" if info["status"] == "healthy" else "Not running"
+                
+                print(f"{status_icon} {display_name}: {service_status} (http://localhost:{port})")
         
         print()  # Extra line for spacing
     
@@ -993,71 +946,6 @@ class EnhancedServiceManager:
         print("\n" + "=" * 60)
         print("🎭 Enhanced Independent Microservices Manager")
         print("=" * 60)
-        print()
-        print("This provides numbered menu for independent services:")
-        print("- Fast: Kokoro TTS + Mistral LLM")
-        print("- Balanced: Kokoro TTS + GPT LLM")
-        print("- Efficient: Dia 4-bit TTS + Mistral LLM")
-        print("- Quality: Hira Dia TTS + GPT LLM")
-        print("- Individual service management")
-        print("- Comprehensive testing")
-        print()  # Add blank line for better readability
-        
-        # Check cache status
-        current_time = time.time()
-        cached_count = 0
-        for service_name in self.service_configs.keys():
-            if service_name in self._status_cache_time:
-                cache_age = current_time - self._status_cache_time[service_name]
-                if cache_age < self._cache_duration:
-                    cached_count += 1
-        
-        # Only show loading if we have no cached data or very little
-        show_loading = cached_count == 0
-        
-        if show_loading:
-            print("🔍 Searching for service status...")
-        else:
-            print("📋 Using cached service status...")
-        
-        # Get status with fast mode and caching
-        status = self.get_service_status(fast_mode=True)
-        
-        if show_loading:
-            print("✅ Status check complete!")
-        
-        running_services = []
-        for name, info in status.items():
-            if info["status"] == "healthy":
-                # Use clean service names for the running list
-                clean_name_map = {
-                    "orchestrator": "Orchestrator",
-                    "whisper_stt": "Whisper STT",
-                    "kokoro_tts": "Kokoro TTS",
-                    "mistral_llm": "Mistral LLM",
-                    "gpt_llm": "GPT LLM"
-                }
-                
-                # For Hira Dia TTS, show the actual engine mode
-                if name == "hira_dia_tts":
-                    engine_status = self.get_hira_dia_engine_status()
-                    if engine_status["service_responsive"]:
-                        current_engine = engine_status["current_engine"]
-                        if current_engine == "dia_4bit":
-                            service_desc = "Dia 4-bit TTS"
-                        elif current_engine == "full_dia":
-                            service_desc = "Hira Dia TTS"
-                        else:
-                            service_desc = f"Hira Dia TTS"
-                else:
-                    service_desc = clean_name_map.get(name, name)
-                
-                running_services.append(service_desc)
-        
-        if running_services:
-            print(f"🟢 Currently running: {', '.join(running_services)}")
-        else:
-            print("🔴 No services currently running")
         
         print("\n📋 Service Combinations (Following existing patterns):")
         print("  1. Show detailed service status")
@@ -1114,7 +1002,8 @@ class EnhancedServiceManager:
                 "mistral_llm",
                 "gpt_llm",
                 "kokoro_tts",
-                "hira_dia_tts"
+                "hira_dia_tts",
+                "zonos_tts"
             ]
             
             # Create ordered service list
@@ -1127,6 +1016,7 @@ class EnhancedServiceManager:
                 "kokoro_tts": "Kokoro TTS",
                 "hira_dia_tts": "Hira Dia TTS",
                 "dia_4bit_tts": "Dia 4-bit TTS",  # Virtual service option
+                "zonos_tts": "Zonos TTS",
                 "mistral_llm": "Mistral LLM",
                 "gpt_llm": "GPT LLM"
             }

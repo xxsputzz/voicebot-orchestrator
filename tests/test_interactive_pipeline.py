@@ -1388,8 +1388,44 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
             # Voice selection
             if len(voices) > 1:
                 print("Available voices:")
-                for i, voice in enumerate(voices, 1):
-                    print(f"  {i}. {voice}")
+                
+                # Try to get detailed voice information
+                try:
+                    detailed_response = requests.get(f"{zonos_url}/voices_detailed", timeout=5)
+                    if detailed_response.status_code == 200:
+                        detailed_data = detailed_response.json()
+                        voice_details = detailed_data.get('voices', {})
+                        
+                        # Create a mapping of voice names to details
+                        voice_info_map = {}
+                        for category, voice_dict in voice_details.items():
+                            for voice_name, info in voice_dict.items():
+                                voice_info_map[voice_name] = {
+                                    'gender': info.get('gender', '').title(),
+                                    'style': info.get('style', '').replace('_', ' ').title(),
+                                    'accent': info.get('accent', '').title(),
+                                    'age': info.get('age', '').replace('_', ' ').title()
+                                }
+                        
+                        # Display voices with details
+                        for i, voice in enumerate(voices, 1):
+                            if voice in voice_info_map:
+                                info = voice_info_map[voice]
+                                gender = info['gender'] or 'Unknown'
+                                style = info['style'] or 'Standard'
+                                accent = info['accent'] or 'General'
+                                print(f"  {i:2}. {voice:<12} | {gender:<7} | {style:<15} | {accent} accent")
+                            else:
+                                print(f"  {i:2}. {voice}")
+                    else:
+                        # Fallback to simple list
+                        for i, voice in enumerate(voices, 1):
+                            print(f"  {i}. {voice}")
+                        
+                except Exception as e:
+                    # Fallback to simple list
+                    for i, voice in enumerate(voices, 1):
+                        print(f"  {i}. {voice}")
                 
                 voice_choice = input(f"Select voice (1-{len(voices)}, default=1): ").strip()
                 try:
@@ -1474,7 +1510,8 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                 "model": selected_model,
                 "emotion": selected_emotion,
                 "seed": user_seed,
-                "format": "wav"
+                "return_audio": True,
+                "output_format": "wav"
             }
             
             print(f"\n🔄 STARTING SYNTHESIS")
@@ -1501,10 +1538,10 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                 if response.status_code == 200:
                     result = response.json()
                     
-                    if 'audio_data' in result:
+                    if 'audio_base64' in result and result['audio_base64']:
                         # Decode base64 audio
                         import base64
-                        audio_bytes = base64.b64decode(result['audio_data'])
+                        audio_bytes = base64.b64decode(result['audio_base64'])
                         
                         # Save audio file
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1592,13 +1629,12 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
             print("3. Test Full Pipeline STT → LLM → TTS")
             print("4. Test Typed Text → TTS (custom text input)")
             print("5. Check service availability")
-            print("6. Show available services")
-            print("7. Test Direct Dia TTS (with EOS analysis)")
-            print("8. Test Direct Zonos TTS (neural speech synthesis)")
+            print("6. Test Direct Dia TTS (with EOS analysis)")
+            print("7. Test Direct Zonos TTS (neural speech synthesis)")
             print("0. Exit")
             
             try:
-                choice = input("\nSelect test type (0-8): ").strip()
+                choice = input("\nSelect test type (0-7): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -1665,9 +1701,8 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                     print(f"\n📊 Result: {result}")
                 
                 elif choice == "5":
-                    print("\n� Checking service availability...")
                     self.detect_available_services()
-                    print("\n�📋 Available Services:")
+                    print("\n📋 Available Services:")
                     if not self.available_services:
                         print("  ❌ No services available")
                     else:
@@ -1677,31 +1712,20 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                             print(f"  ✅ {service_name:<20} ({service_type:<3}) - {url}")
                 
                 elif choice == "6":
-                    print("\n📋 Available Services:")
-                    if not self.available_services:
-                        print("  ❌ No services detected (use option 5 to check)")
-                        print("  💡 Use option 5 to check service availability first")
-                    else:
-                        for service_name, config in self.available_services.items():
-                            service_type = config["type"].upper()
-                            url = config["url"]
-                            print(f"  ✅ {service_name:<20} ({service_type:<3}) - {url}")
-                
-                elif choice == "7":
                     print("\n🎯 Direct Dia TTS Test with EOS Analysis")
                     success = await self.test_direct_dia_tts()
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
-                elif choice == "8":
+                elif choice == "7":
                     success = await self.test_direct_zonos_tts()
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
                 else:
-                    print("❌ Invalid choice. Please enter 0-8.")
+                    print("❌ Invalid choice. Please enter 0-7.")
                 
-                if choice in ["1", "2", "3", "4", "7", "8"]:
+                if choice in ["1", "2", "3", "4", "6", "7"]:
                     input("\nPress Enter to continue...")
                     
             except KeyboardInterrupt:
