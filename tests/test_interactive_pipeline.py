@@ -120,6 +120,7 @@ class InteractivePipelineTester:
             "kokoro_tts": {"url": "http://localhost:8011", "type": "tts"},
             "hira_dia_tts": {"url": "http://localhost:8012", "type": "tts"}, 
             "dia_4bit_tts": {"url": "http://localhost:8013", "type": "tts"},
+            "zonos_tts": {"url": "http://localhost:8014", "type": "tts"},
             "mistral_llm": {"url": "http://localhost:8021", "type": "llm"},
             "gpt_llm": {"url": "http://localhost:8022", "type": "llm"}
         }
@@ -1277,6 +1278,307 @@ Now, listen… (gasps) if you've got steady income, we can help you qualify for 
             except:
                 pass
     
+    async def test_direct_zonos_tts(self) -> bool:
+        """Test direct Zonos TTS service with neural speech synthesis"""
+        print("\n🧠 Direct Zonos TTS Test (Neural Speech Synthesis)")
+        print("-" * 60)
+        
+        try:
+            import json
+            import requests
+            import time
+            import numpy as np
+            import random
+            from datetime import datetime
+            
+            # Check if Zonos TTS service is running
+            zonos_url = "http://localhost:8014"
+            print(f"🔍 Checking Zonos TTS service at {zonos_url}...")
+            
+            try:
+                response = requests.get(f"{zonos_url}/health", timeout=5)
+                if response.status_code != 200:
+                    print(f"❌ Zonos TTS service not healthy: {response.status_code}")
+                    return False
+                
+                health_data = response.json()
+                print(f"✅ Service status: {health_data.get('status', 'unknown')}")
+                print(f"   Version: {health_data.get('version', 'unknown')}")
+                
+            except requests.RequestException as e:
+                print(f"❌ Cannot connect to Zonos TTS service: {e}")
+                print(f"   Make sure the service is running on port 8014")
+                return False
+            
+            # Get available voices and models
+            try:
+                voices_response = requests.get(f"{zonos_url}/voices", timeout=5)
+                models_response = requests.get(f"{zonos_url}/models", timeout=5)
+                
+                if voices_response.status_code == 200:
+                    response_data = voices_response.json()
+                    # Handle both list format (new) and object format (legacy)
+                    if isinstance(response_data, list):
+                        voices = response_data
+                    else:
+                        voices = response_data.get('voices', [])
+                    print(f"🎭 Available voices: {', '.join(voices)}")
+                else:
+                    voices = ['default']
+                    print("⚠️ Using default voice")
+                
+                if models_response.status_code == 200:
+                    response_data = models_response.json()
+                    # Handle both list format (new) and object format (legacy)
+                    if isinstance(response_data, list):
+                        models = response_data
+                    else:
+                        models = response_data.get('models', [])
+                    print(f"🤖 Available models: {', '.join(models)}")
+                else:
+                    models = ['zonos-v1']
+                    print("⚠️ Using default model")
+                    
+            except Exception as e:
+                print(f"⚠️ Could not get voice/model info: {e}")
+                voices = ['default']
+                models = ['zonos-v1']
+            
+            # Get user input for text
+            print("\n📝 TEXT INPUT")
+            print("=" * 30)
+            print("Enter your text (type 'DONE' on a new line to finish):")
+            print("Or press Enter for default neural TTS demo text")
+            
+            user_lines = []
+            first_line = input("> ").strip()
+            
+            if first_line == "":
+                # Use default text showcasing neural capabilities
+                test_text = """Welcome to Zonos Neural TTS! This is a demonstration of advanced neural speech synthesis technology. 
+I can express emotions, adjust speaking styles, and generate natural-sounding speech with realistic intonation patterns.
+Listen to how I can be excited, thoughtful, or conversational depending on the context. The neural networks behind my voice 
+create smooth transitions, natural breathing patterns, and expressive delivery that brings text to life."""
+                print("📖 Using default neural TTS demo text")
+            elif first_line.upper() == "DONE":
+                print("❌ No text entered!")
+                return False
+            else:
+                user_lines.append(first_line)
+                
+                while True:
+                    line = input("> ").strip()
+                    if line.upper() == "DONE":
+                        break
+                    user_lines.append(line)
+                
+                test_text = "\n".join(user_lines)
+                print(f"📖 Custom text entered ({len(user_lines)} lines)")
+            
+            # Show text analysis
+            print(f"\n📊 Text Analysis:")
+            print(f"   Characters: {len(test_text)}")
+            print(f"   Lines: {test_text.count(chr(10)) + 1}")
+            print(f"   Words (approx): {len(test_text.split())}")
+            
+            # Get user preferences
+            print("\n🎛️ VOICE & MODEL SELECTION")
+            print("=" * 35)
+            
+            # Voice selection
+            if len(voices) > 1:
+                print("Available voices:")
+                for i, voice in enumerate(voices, 1):
+                    print(f"  {i}. {voice}")
+                
+                voice_choice = input(f"Select voice (1-{len(voices)}, default=1): ").strip()
+                try:
+                    if voice_choice:
+                        voice_idx = int(voice_choice) - 1
+                        if 0 <= voice_idx < len(voices):
+                            selected_voice = voices[voice_idx]
+                        else:
+                            print(f"⚠️ Invalid choice {voice_choice}, using default")
+                            selected_voice = voices[0]
+                    else:
+                        selected_voice = voices[0]
+                except ValueError:
+                    print(f"⚠️ Invalid input '{voice_choice}', using default")
+                    selected_voice = voices[0]
+            else:
+                selected_voice = voices[0]
+            
+            print(f"🎭 Selected voice: {selected_voice}")
+            
+            # Model selection
+            if len(models) > 1:
+                print("\nAvailable models:")
+                for i, model in enumerate(models, 1):
+                    print(f"  {i}. {model}")
+                
+                model_choice = input(f"Select model (1-{len(models)}, default=1): ").strip()
+                try:
+                    model_idx = int(model_choice) - 1 if model_choice else 0
+                    if 0 <= model_idx < len(models):
+                        selected_model = models[model_idx]
+                    else:
+                        selected_model = models[0]
+                except ValueError:
+                    selected_model = models[0]
+            else:
+                selected_model = models[0]
+            
+            print(f"🤖 Selected model: {selected_model}")
+            
+            # Emotion selection
+            print("\n😊 EMOTION CONTROL")
+            print("=" * 25)
+            emotions = ['neutral', 'happy', 'excited', 'calm', 'thoughtful', 'conversational']
+            print("Available emotions:")
+            for i, emotion in enumerate(emotions, 1):
+                print(f"  {i}. {emotion}")
+            
+            emotion_choice = input(f"Select emotion (1-{len(emotions)}, default=1): ").strip()
+            try:
+                emotion_idx = int(emotion_choice) - 1 if emotion_choice else 0
+                if 0 <= emotion_idx < len(emotions):
+                    selected_emotion = emotions[emotion_idx]
+                else:
+                    selected_emotion = 'neutral'
+            except ValueError:
+                selected_emotion = 'neutral'
+            
+            print(f"😊 Selected emotion: {selected_emotion}")
+            
+            # Seed selection
+            print("\n🎲 SEED SELECTION")
+            print("=" * 25)
+            seed_input = input("Enter seed number (or press Enter for random): ").strip()
+            
+            if seed_input == "":
+                user_seed = random.randint(1000, 99999)
+                print(f"🎲 Random seed generated: {user_seed}")
+            else:
+                try:
+                    user_seed = int(seed_input)
+                    print(f"🎲 Using seed: {user_seed}")
+                except ValueError:
+                    print("❌ Invalid seed, using random")
+                    user_seed = random.randint(1000, 99999)
+                    print(f"🎲 Random seed generated: {user_seed}")
+            
+            # Prepare synthesis request
+            synthesis_request = {
+                "text": test_text,
+                "voice": selected_voice,
+                "model": selected_model,
+                "emotion": selected_emotion,
+                "seed": user_seed,
+                "format": "wav"
+            }
+            
+            print(f"\n🔄 STARTING SYNTHESIS")
+            print("=" * 35)
+            print(f"📊 Configuration:")
+            print(f"   Voice: {selected_voice}")
+            print(f"   Model: {selected_model}")
+            print(f"   Emotion: {selected_emotion}")
+            print(f"   Seed: {user_seed}")
+            print(f"   Text length: {len(test_text)} characters")
+            
+            print(f"\n🧠 Synthesizing with neural networks...")
+            start_time = time.time()
+            
+            try:
+                response = requests.post(
+                    f"{zonos_url}/synthesize",
+                    json=synthesis_request,
+                    timeout=60  # Longer timeout for synthesis
+                )
+                
+                synthesis_time = time.time() - start_time
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    if 'audio_data' in result:
+                        # Decode base64 audio
+                        import base64
+                        audio_bytes = base64.b64decode(result['audio_data'])
+                        
+                        # Save audio file
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        filename = f"zonos_neural_seed_{user_seed}_{selected_voice}_{selected_emotion}_{timestamp}.wav"
+                        filepath = self.audio_dir / filename
+                        
+                        with open(filepath, 'wb') as f:
+                            f.write(audio_bytes)
+                        
+                        # Get audio info from response
+                        audio_duration = result.get('duration', 0)
+                        sample_rate = result.get('sample_rate', 22050)
+                        
+                        # Format synthesis time
+                        syn_minutes = int(synthesis_time // 60)
+                        syn_seconds = int(synthesis_time % 60)
+                        syn_time_str = f"{syn_minutes:02d}:{syn_seconds:02d}"
+                        
+                        print(f"\n📊 SYNTHESIS RESULTS:")
+                        print(f"   🎵 Generated duration: {audio_duration:.2f} seconds")
+                        print(f"   🔊 Sample rate: {sample_rate:,} Hz")
+                        print(f"   ⏱️ Synthesis time: {syn_time_str}")
+                        print(f"   🚀 Speed ratio: {audio_duration/synthesis_time:.2f}x real-time")
+                        print(f"   💾 Saved: {filename}")
+                        
+                        # Quality analysis if available in response
+                        if 'quality_metrics' in result:
+                            metrics = result['quality_metrics']
+                            print(f"\n🔍 QUALITY METRICS:")
+                            for metric, value in metrics.items():
+                                print(f"   {metric}: {value}")
+                        
+                        # Neural analysis
+                        if 'neural_info' in result:
+                            neural_info = result['neural_info']
+                            print(f"\n🧠 NEURAL SYNTHESIS INFO:")
+                            print(f"   Model layers: {neural_info.get('layers', 'N/A')}")
+                            print(f"   Processing steps: {neural_info.get('steps', 'N/A')}")
+                            print(f"   Emotion strength: {neural_info.get('emotion_strength', 'N/A')}")
+                        
+                        print(f"\n✅ Zonos Neural TTS test completed successfully!")
+                        print(f"   🎵 Audio file: {filename}")
+                        print(f"   📊 Duration: {audio_duration:.2f}s")
+                        print(f"   🎭 Voice/Emotion: {selected_voice}/{selected_emotion}")
+                        print(f"   🧠 Model: {selected_model}")
+                        
+                        return True
+                        
+                    else:
+                        print(f"   ❌ No audio data in response")
+                        return False
+                        
+                else:
+                    print(f"   ❌ Synthesis failed: {response.status_code}")
+                    try:
+                        error_data = response.json()
+                        print(f"   Error: {error_data.get('detail', 'Unknown error')}")
+                    except:
+                        print(f"   Error: {response.text}")
+                    return False
+                    
+            except requests.Timeout:
+                print(f"   ❌ Synthesis timed out (>60 seconds)")
+                return False
+            except Exception as e:
+                print(f"   ❌ Synthesis failed: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Zonos TTS test failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     async def run_interactive_tests(self):
         """Run interactive test menu without automatic service checks"""
         print("🎯 Interactive Pipeline Tester")
@@ -1292,10 +1594,11 @@ Now, listen… (gasps) if you've got steady income, we can help you qualify for 
             print("5. Check service availability")
             print("6. Show available services")
             print("7. Test Direct Dia TTS (with EOS analysis)")
+            print("8. Test Direct Zonos TTS (neural speech synthesis)")
             print("0. Exit")
             
             try:
-                choice = input("\nSelect test type (0-7): ").strip()
+                choice = input("\nSelect test type (0-8): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -1390,10 +1693,15 @@ Now, listen… (gasps) if you've got steady income, we can help you qualify for 
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
-                else:
-                    print("❌ Invalid choice. Please enter 0-7.")
+                elif choice == "8":
+                    success = await self.test_direct_zonos_tts()
+                    result = "✅ SUCCESS" if success else "❌ FAILED"
+                    print(f"\n📊 Result: {result}")
                 
-                if choice in ["1", "2", "3", "4", "7"]:
+                else:
+                    print("❌ Invalid choice. Please enter 0-8.")
+                
+                if choice in ["1", "2", "3", "4", "7", "8"]:
                     input("\nPress Enter to continue...")
                     
             except KeyboardInterrupt:
