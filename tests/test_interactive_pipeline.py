@@ -1616,25 +1616,310 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
             traceback.print_exc()
             return False
     
+    async def test_direct_tortoise_tts(self) -> bool:
+        """Test direct Tortoise TTS service with ultra high-quality voice synthesis"""
+        print("\n🐢 Direct Tortoise TTS Test (Ultra High-Quality Voice Synthesis)")
+        print("-" * 70)
+        
+        try:
+            import json
+            import requests
+            import time
+            import base64
+            import soundfile as sf
+            import io
+            import numpy as np
+            from datetime import datetime
+            
+            # Check if Tortoise TTS service is running
+            tortoise_url = "http://localhost:8015"
+            print(f"🔍 Checking Tortoise TTS service at {tortoise_url}...")
+            
+            try:
+                response = requests.get(f"{tortoise_url}/health", timeout=5)
+                if response.status_code != 200:
+                    print(f"❌ Tortoise TTS service not healthy: {response.status_code}")
+                    return False
+                
+                health_data = response.json()
+                print(f"✅ Service status: {health_data.get('status', 'unknown')}")
+                engine_info = health_data.get('engine', 'Enhanced Placeholder')
+                print(f"   Engine: {engine_info}")
+                
+            except requests.RequestException as e:
+                print(f"❌ Cannot connect to Tortoise TTS service: {e}")
+                print(f"   Make sure the service is running on port 8015")
+                return False
+            
+            # Get available voices and presets
+            try:
+                voices_response = requests.get(f"{tortoise_url}/voices", timeout=5)
+                presets_response = requests.get(f"{tortoise_url}/presets", timeout=5)
+                
+                if voices_response.status_code == 200:
+                    voices = voices_response.json()  # Direct list response
+                    if not isinstance(voices, list):
+                        voices = ['angie', 'denise', 'freeman']  # Fallback
+                    print(f"🎭 Available voices: {', '.join(voices[:10])}{'...' if len(voices) > 10 else ''}")
+                    print(f"   Total voices: {len(voices)}")
+                else:
+                    voices = ['angie', 'denise', 'freeman']
+                    print("⚠️ Using default voices")
+                
+                if presets_response.status_code == 200:
+                    response_data = presets_response.json()
+                    presets = response_data.get('presets', ['fast', 'standard', 'high_quality'])
+                    print(f"🔧 Available quality presets: {', '.join(presets)}")
+                else:
+                    presets = ['fast', 'standard', 'high_quality']
+                    print("⚠️ Using default presets")
+                    
+            except Exception as e:
+                print(f"⚠️ Could not get voice/preset info: {e}")
+                voices = ['angie', 'denise', 'freeman', 'pat', 'william']
+                presets = ['fast', 'standard', 'high_quality']
+            
+            # Voice selection - simplified two-column display
+            print("\n🎭 VOICE SELECTION")
+            print("=" * 60)
+            
+            # Display voices in two columns, simple format
+            print(f"{'COLUMN 1':<28} {'COLUMN 2':<28}")
+            print("-" * 56)
+            
+            all_display_voices = voices
+            mid_point = (len(voices) + 1) // 2
+            
+            for i in range(mid_point):
+                # Left column
+                if i < len(voices):
+                    left_voice = voices[i]
+                    left_text = f"{i+1:2d}. {left_voice}"
+                else:
+                    left_text = ""
+                
+                # Right column
+                right_index = i + mid_point
+                if right_index < len(voices):
+                    right_voice = voices[right_index]
+                    right_text = f"{right_index+1:2d}. {right_voice}"
+                else:
+                    right_text = ""
+                
+                print(f"{left_text:<28} {right_text:<28}")
+            
+            print(f"\n   0. Use default voice (angie)")
+            print(f"\nTotal voices: {len(voices)}")
+            
+            voice_choice = input(f"\nSelect voice (0-{len(voices)}): ").strip()
+            
+            if voice_choice == "0" or voice_choice == "":
+                selected_voice = "angie"
+                print(f"🎭 Using default voice: {selected_voice}")
+            elif voice_choice.isdigit() and 1 <= int(voice_choice) <= len(voices):
+                selected_voice = voices[int(voice_choice) - 1]
+                print(f"🎭 Selected voice: {selected_voice}")
+            else:
+                print("❌ Invalid choice, using default voice: angie")
+                selected_voice = "angie"
+            
+            # Quality preset selection
+            print("\n🔧 QUALITY PRESET")
+            print("=" * 30)
+            for i, preset in enumerate(presets, 1):
+                descriptions = {
+                    'fast': 'Quick generation (~3s), good quality',
+                    'standard': 'Balanced quality/speed (~5s)', 
+                    'high_quality': 'Best quality (~8s), slower'
+                }
+                desc = descriptions.get(preset, 'Custom preset')
+                print(f"  {i}. {preset} - {desc}")
+            
+            preset_choice = input(f"\nSelect quality preset (1-{len(presets)}) or Enter for standard: ").strip()
+            
+            if preset_choice == "":
+                selected_preset = "standard"
+                print(f"🔧 Using default preset: {selected_preset}")
+            elif preset_choice.isdigit() and 1 <= int(preset_choice) <= len(presets):
+                selected_preset = presets[int(preset_choice) - 1]
+                print(f"🔧 Selected preset: {selected_preset}")
+            else:
+                print("❌ Invalid choice, using standard preset")
+                selected_preset = "standard"
+            
+            # Get user input for text
+            print("\n📝 TEXT INPUT")
+            print("=" * 30)
+            print("Enter your text (type 'DONE' on a new line to finish):")
+            print("Or leave empty and type 'DONE' for default ultra-quality demo text")
+            print()
+            
+            user_lines = []
+            print("Start typing (type 'DONE' when finished):")
+            
+            while True:
+                line = input("> ").strip()
+                if line.upper() == "DONE":
+                    break
+                elif line == "" and len(user_lines) == 0:
+                    # If first line is empty and user types DONE next, they want default text
+                    continue
+                else:
+                    user_lines.append(line)
+            
+            if len(user_lines) == 0:
+                # Use default text showcasing Tortoise capabilities
+                test_text = """Welcome to Tortoise TTS, the pinnacle of neural voice synthesis technology. 
+This system represents the cutting edge of artificial intelligence voice generation, capable of producing speech 
+that is virtually indistinguishable from human speakers. With advanced prosodic modeling and emotional expression, 
+I can convey subtle nuances in tone, rhythm, and emphasis that bring text to life in remarkable ways."""
+                print("📖 Using default ultra-quality demo text")
+            else:
+                test_text = "\n".join(user_lines)
+                print(f"📖 Custom text entered ({len(user_lines)} lines)")
+            
+            # Show synthesis parameters
+            print(f"\n📊 Synthesis Parameters:")
+            print(f"   Voice: {selected_voice}")
+            print(f"   Quality: {selected_preset}")
+            print(f"   Text length: {len(test_text)} characters")
+            print(f"   Estimated words: {len(test_text.split())}")
+            
+            # Confirmation before synthesis
+            print(f"\n❓ Proceed with synthesis?")
+            confirmation = input("   Type 'yes' or 'y' to continue, anything else to cancel: ").strip().lower()
+            
+            if confirmation not in ['yes', 'y']:
+                print("❌ Synthesis cancelled by user")
+                return False
+            
+            # Prepare synthesis request
+            synthesis_data = {
+                "text": test_text,
+                "voice": selected_voice,
+                "preset": selected_preset,
+                "return_audio": True
+            }
+            
+            print(f"\n🚀 Starting synthesis with Tortoise TTS...")
+            print("   This may take longer than other TTS engines due to ultra-high quality processing...")
+            
+            start_time = time.time()
+            
+            try:
+                response = requests.post(
+                    f"{tortoise_url}/synthesize",
+                    json=synthesis_data,
+                    timeout=120  # Longer timeout for Tortoise
+                )
+                
+                synthesis_time = time.time() - start_time
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    print(f"✅ Synthesis completed in {synthesis_time:.2f} seconds")
+                    print(f"   Quality: {result.get('quality', selected_preset)}")
+                    print(f"   Voice used: {result.get('voice', selected_voice)}")
+                    
+                    # Handle audio data
+                    if result.get("audio_base64"):
+                        print("🎵 Audio generated successfully!")
+                        
+                        # Decode and save audio
+                        try:
+                            audio_data = base64.b64decode(result["audio_base64"])
+                            
+                            # Generate filename with timestamp and voice
+                            timestamp = datetime.now().strftime("%H%M%S")
+                            filename = f"tortoise_test_{selected_voice}_{selected_preset}_{timestamp}.wav"
+                            
+                            with open(filename, "wb") as f:
+                                f.write(audio_data)
+                            
+                            print(f"💾 Audio saved: {filename}")
+                            
+                            # Audio analysis
+                            try:
+                                # Read audio for analysis
+                                audio_io = io.BytesIO(audio_data)
+                                audio_array, sample_rate = sf.read(audio_io)
+                                
+                                duration = len(audio_array) / sample_rate
+                                rms = np.sqrt(np.mean(audio_array**2))
+                                
+                                print(f"📊 Audio Analysis:")
+                                print(f"   Duration: {duration:.2f} seconds")
+                                print(f"   Sample Rate: {sample_rate} Hz")
+                                print(f"   RMS Level: {rms:.4f}")
+                                print(f"   Real-time factor: {synthesis_time/duration:.2f}x")
+                                
+                            except Exception as e:
+                                print(f"⚠️ Audio analysis failed: {e}")
+                            
+                        except Exception as e:
+                            print(f"❌ Failed to save audio: {e}")
+                    
+                    else:
+                        print("⚠️ No audio data in response")
+                        
+                    # Show performance metrics
+                    print(f"\n⚡ Performance Metrics:")
+                    chars_per_sec = len(test_text) / synthesis_time
+                    print(f"   Characters/second: {chars_per_sec:.1f}")
+                    print(f"   Words/minute: {(len(test_text.split()) * 60) / synthesis_time:.1f}")
+                    
+                    return True
+                
+                else:
+                    print(f"❌ Synthesis failed: HTTP {response.status_code}")
+                    try:
+                        error_data = response.json()
+                        print(f"   Error: {error_data.get('detail', 'Unknown error')}")
+                    except:
+                        print(f"   Response: {response.text[:200]}")
+                    return False
+                    
+            except requests.exceptions.Timeout:
+                synthesis_time = time.time() - start_time
+                print(f"❌ Synthesis timed out after {synthesis_time:.1f} seconds")
+                print("   Tortoise TTS requires more time for ultra-high quality synthesis")
+                return False
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Request failed: {e}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Tortoise TTS test failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     async def run_interactive_tests(self):
         """Run interactive test menu without automatic service checks"""
         print("🎯 Interactive Pipeline Tester")
         
         while True:
-            print("\n" + "="*50)
+            print("\n" + "="*60)
             print("📋 TEST MENU")
-            print("="*50)
-            print("1. Test STT → LLM (select specific services)")
-            print("2. Test LLM → TTS (select specific services)")
-            print("3. Test Full Pipeline STT → LLM → TTS")
-            print("4. Test Typed Text → TTS (custom text input)")
-            print("5. Check service availability")
-            print("6. Test Direct Dia TTS (with EOS analysis)")
-            print("7. Test Direct Zonos TTS (neural speech synthesis)")
-            print("0. Exit")
+            print("="*60)
+            
+            print("\n🧪 PIPELINE TESTS:")
+            print("  1. Test STT → LLM (select specific services)")
+            print("  2. Test LLM → TTS (select specific services)")
+            print("  3. Test Full Pipeline STT → LLM → TTS")
+            print("  4. Test Typed Text → TTS (custom text input)")
+            
+            print("\n🔍 SERVICE TESTS:")
+            print("  5. Check service availability")
+            print("  6. Test Direct Dia TTS (with EOS analysis)")
+            print("  7. Test Direct Zonos TTS (neural speech synthesis)")
+            print("  8. Test Direct Tortoise TTS (ultra high-quality voice synthesis)")
+            
+            print("\n  0. Exit")
             
             try:
-                choice = input("\nSelect test type (0-7): ").strip()
+                choice = input("\nSelect test type (0-8): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -1722,10 +2007,15 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
-                else:
-                    print("❌ Invalid choice. Please enter 0-7.")
+                elif choice == "8":
+                    success = await self.test_direct_tortoise_tts()
+                    result = "✅ SUCCESS" if success else "❌ FAILED"
+                    print(f"\n📊 Result: {result}")
                 
-                if choice in ["1", "2", "3", "4", "6", "7"]:
+                else:
+                    print("❌ Invalid choice. Please enter 0-8.")
+                
+                if choice in ["1", "2", "3", "4", "6", "7", "8"]:
                     input("\nPress Enter to continue...")
                     
             except KeyboardInterrupt:

@@ -8,7 +8,9 @@ import sys
 import subprocess
 import time
 import signal
+import atexit
 import requests
+import psutil
 from pathlib import Path
 
 # Add the project root to Python path
@@ -33,6 +35,12 @@ class EnhancedServiceManager:
         self._status_cache_time = {}
         self._cache_duration = 30  # Cache for 30 seconds (increased from 10)
         self.intended_engine_mode = {}  # Track intended engine modes for services
+        
+        # Setup signal handlers for proper cleanup
+        self.setup_signal_handlers()
+        
+        # Register cleanup on exit - only clear tracking, don't stop services
+        atexit.register(self.cleanup_tracking_only)
         
         # Service configurations matching existing patterns
         self.service_configs = {
@@ -80,6 +88,14 @@ class EnhancedServiceManager:
                 "required": False,
                 "type": "tts"
             },
+            "tortoise_tts": {
+                "script": "tts_tortoise_service.py",
+                "port": 8015,
+                "description": "Tortoise TTS (Ultra High-Quality)",
+                "required": False,
+                "type": "tts",
+                "args": ["--direct"]
+            },
             "mistral_llm": {
                 "script": "llm_mistral_service.py",
                 "port": 8021,
@@ -101,7 +117,7 @@ class EnhancedServiceManager:
             "gpt_small": {
                 "name": "GPT Small (8GB GPU)",
                 "script": "llm_gpt_service.py",
-                "port": 8022,
+                "port": 8026,
                 "description": "DialoGPT-Small (117M params) - RTX 4060/3070",
                 "gpu_memory": "2-8GB",
                 "response_time": "1-3 seconds",
@@ -165,8 +181,110 @@ class EnhancedServiceManager:
                 "description": "Orchestrator + Whisper STT + GPT LLM + Hira Dia TTS (Maximum quality)",
                 "services": ["orchestrator", "whisper_stt", "hira_dia_tts", "gpt_llm"],
                 "use_case": "High-quality content, professional presentations with Whisper accuracy"
+            },
+            "premium": {
+                "name": "Premium Combo",
+                "description": "Orchestrator + Whisper STT + GPT LLM + Tortoise TTS (Ultra High-Quality)",
+                "services": ["orchestrator", "whisper_stt", "tortoise_tts", "gpt_llm"],
+                "use_case": "Ultra high-quality speech synthesis for premium applications and content creation"
             }
         }
+    
+    def setup_signal_handlers(self):
+        """Setup signal handlers for graceful shutdown"""
+        def signal_handler(signum, frame):
+            print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+            print("   Note: Services will continue running independently")
+            self.cleanup_tracking_only()
+            sys.exit(0)
+        
+        # Handle common termination signals
+        if hasattr(signal, 'SIGTERM'):
+            signal.signal(signal.SIGTERM, signal_handler)
+        if hasattr(signal, 'SIGINT'):
+            signal.signal(signal.SIGINT, signal_handler)
+    
+    def cleanup_on_exit(self):
+        """Clean up all managed processes on exit"""
+        if not self.services:
+            return
+            
+        print("\n🧹 Cleaning up managed services...")
+        services_to_stop = list(self.services.keys())
+        
+        for service_name in services_to_stop:
+            try:
+                service_info = self.services[service_name]
+                process = service_info["process"]
+                
+                if process.poll() is None:  # Process is still running
+                    print(f"🛑 Stopping {service_name}...")
+                    try:
+                        # Try graceful shutdown first
+                        process.terminate()
+                        process.wait(timeout=3)
+                        print(f"✅ {service_name} stopped gracefully")
+                    except subprocess.TimeoutExpired:
+                        # Force kill if graceful shutdown fails
+                        process.kill()
+                        process.wait()
+                        print(f"⚡ {service_name} force killed")
+                        
+            except Exception as e:
+                print(f"❌ Error stopping {service_name}: {e}")
+        
+        # Clear the services registry
+        self.services.clear()
+        self.intended_engine_mode.clear()
+        print("✅ Cleanup complete")
+    
+    def cleanup_tracking_only(self):
+        """Clean up only tracking data, leave services running"""
+        if not self.services:
+            return
+            
+        print("\n🧹 Clearing service tracking (services remain running)...")
+        
+        # Clear the services registry without stopping processes
+        self.services.clear()
+        self.intended_engine_mode.clear()
+        print("✅ Tracking cleanup complete - services continue running independently")
+    
+    def force_stop_all_python_processes(self):
+        """Nuclear option: Stop all Python processes (use with caution)"""
+        print("\n⚠️ FORCE STOPPING ALL PYTHON PROCESSES - This will terminate ALL Python applications!")
+        confirmation = input("Type 'FORCE' to confirm this action: ").strip()
+        
+        if confirmation != 'FORCE':
+            print("❌ Force stop cancelled")
+            return False
+            
+        try:
+            stopped_count = 0
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'].lower() in ['python.exe', 'python', 'pythonw.exe']:
+                        # Don't kill our own process
+                        if proc.pid == os.getpid():
+                            continue
+                            
+                        print(f"🛑 Stopping Python process {proc.pid}: {proc.info['name']}")
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=3)
+                        except psutil.TimeoutExpired:
+                            proc.kill()
+                        stopped_count += 1
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+                    
+            print(f"✅ Force stopped {stopped_count} Python processes")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error force stopping processes: {e}")
+            return False
     
     def start_service(self, service_name: str) -> bool:
         """Start a specific service (optimized for speed)"""
@@ -204,6 +322,9 @@ class EnhancedServiceManager:
             python_exe = get_python_executable()
             
             # Start the service process
+            # Get any additional arguments from config
+            args = config.get("args", [])
+            
             if service_name in ["orchestrator", "whisper_stt"]:
                 # For orchestrator and whisper_stt, use --direct flag to run server directly
                 # Enable stdout/stderr for debugging STT issues
@@ -211,21 +332,26 @@ class EnhancedServiceManager:
                     # Don't capture output for STT service so we can see debug logs
                     process = subprocess.Popen([
                         python_exe, str(script_path), "--direct"
-                    ], cwd=project_root)
+                    ] + args, cwd=project_root)
                 else:
                     process = subprocess.Popen([
                         python_exe, str(script_path), "--direct"
-                    ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    ] + args, cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             elif service_name == "hira_dia_tts":
                 # Don't capture output for Hira Dia TTS to avoid interfering with model loading
                 process = subprocess.Popen([
                     python_exe, str(script_path)
-                ], cwd=project_root)
+                ] + args, cwd=project_root)
+            elif service_name == "tortoise_tts":
+                # Tortoise TTS needs --direct flag but with output capture to prevent log spam
+                process = subprocess.Popen([
+                    python_exe, str(script_path), "--direct"
+                ] + args, cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             else:
                 # For other services, run normally
                 process = subprocess.Popen([
                     python_exe, str(script_path)
-                ], cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                ] + args, cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
             self.services[service_name] = {
                 "process": process,
@@ -317,8 +443,8 @@ class EnhancedServiceManager:
         else:
             print(f"🛑 Stopping independent {config['description']}...")
             try:
-                import psutil
                 port = config['port']
+                stopped = False
                 
                 # Find process using the port
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
@@ -327,25 +453,30 @@ class EnhancedServiceManager:
                         for conn in connections:
                             if conn.laddr.port == port:
                                 print(f"🎯 Found process {proc.pid} using port {port}")
-                                proc.terminate()
-                                proc.wait(timeout=5)
-                                print(f"✅ Independent {service_name} stopped")
+                                try:
+                                    # Try graceful shutdown first
+                                    proc.terminate()
+                                    proc.wait(timeout=5)
+                                    print(f"✅ Independent {service_name} stopped gracefully")
+                                except psutil.TimeoutExpired:
+                                    # Force kill if graceful shutdown fails
+                                    proc.kill()
+                                    proc.wait()
+                                    print(f"⚡ Independent {service_name} force killed")
+                                
                                 # Clean up tracking for intended engine mode
                                 if service_name in self.intended_engine_mode:
                                     del self.intended_engine_mode[service_name]
                                 # Invalidate cache since service status changed
                                 self.invalidate_cache(service_name)
-                                return True
+                                stopped = True
+                                break
                     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                         continue
                 
-                print(f"⚠️ No process found using port {port}")
+                if not stopped:
+                    print(f"⚠️ No process found using port {port}")
                 return True
-                
-            except ImportError:
-                print("⚠️ psutil not available - cannot stop independent services")
-                print("   Install with: pip install psutil")
-                return False
             except Exception as e:
                 print(f"❌ Failed to stop independent service: {e}")
                 return False
@@ -647,6 +778,7 @@ class EnhancedServiceManager:
             ("kokoro_tts", "Kokoro TTS"),
             ("hira_dia_tts", "Hira Dia TTS"),
             ("zonos_tts", "Zonos TTS"),
+            ("tortoise_tts", "Tortoise TTS"),
             ("mistral_llm", "Mistral LLM"),
             ("gpt_llm", "GPT LLM")
         ]
@@ -893,17 +1025,14 @@ class EnhancedServiceManager:
         """Run interactive service management with numbered menu (following existing test patterns)"""
         self.running = True
         
-        # Setup signal handlers
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        
         while self.running:
             try:
                 self.show_main_menu()
-                choice = input("\nEnter your choice (0-11): ").strip()
+                choice = input("\nEnter your choice (0-13): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
+                    print("   ℹ️  Note: All running services will continue running independently")
                     break
                 elif choice == "1":
                     self.show_status()
@@ -916,19 +1045,23 @@ class EnhancedServiceManager:
                 elif choice == "5":
                     self.start_combination("quality")
                 elif choice == "6":
-                    self.manage_individual_services()
+                    self.start_combination("premium")
                 elif choice == "7":
-                    self.stop_all_services()
+                    self.manage_individual_services()
                 elif choice == "8":
-                    self.test_running_services()
+                    self.stop_all_services()
                 elif choice == "9":
-                    self.launch_comprehensive_tests()
+                    self.test_running_services()
                 elif choice == "10":
-                    self.manage_gpu_models()
+                    self.launch_comprehensive_tests()
                 elif choice == "11":
+                    self.manage_gpu_models()
+                elif choice == "12":
                     self.handle_hira_dia_engine_switch_sync()
+                elif choice == "13":
+                    self.force_stop_all_python_processes()
                 else:
-                    print("❌ Invalid choice. Please enter 0-11.")
+                    print("❌ Invalid choice. Please enter 0-13.")
                 
                 # Only pause for status/info displays, not for interactive actions
                 if choice in ["1"]:  # Only for status display
@@ -953,18 +1086,20 @@ class EnhancedServiceManager:
         print("  3. Start Efficient Combo (Orchestrator + Whisper STT + Mistral LLM + Dia 4-bit TTS)")
         print("  4. Start Balanced Combo (Orchestrator + Whisper STT + GPT LLM + Kokoro TTS)")
         print("  5. Start Quality Combo (Orchestrator + Whisper STT + GPT LLM + Hira Dia TTS)")
+        print("  6. Start Premium Combo (Orchestrator + Whisper STT + GPT LLM + Tortoise TTS)")
         
         print("\n⚙️  Service Management:")
-        print("  6. Manage individual services")
-        print("  7. Stop all services") 
-        print("  8. Test running services")
-        print("  9. Launch comprehensive test suite")
+        print("  7. Manage individual services")
+        print("  8. Stop all services (explicit shutdown)") 
+        print("  9. Test running services")
+        print(" 10. Launch comprehensive test suite")
         
         print("\n🎮 Advanced Options:")
-        print(" 10. Select GPU/LLM Model (8GB → AWS A100)")
-        print(" 11. Switch Hira Dia Engine Mode (Quality ↔ Speed)")
+        print(" 11. Select GPU/LLM Model (8GB → AWS A100)")
+        print(" 12. Switch Hira Dia Engine Mode (Quality ↔ Speed)")
+        print(" 13. Force Stop All Python Processes (Nuclear Option)")
         
-        print("\n  0. Exit")
+        print("\n  0. Exit (services continue running)")
     
     def manage_individual_services(self):
         """Manage individual services with numbered menu (optimized for speed with caching)"""
@@ -1003,7 +1138,9 @@ class EnhancedServiceManager:
                 "gpt_llm",
                 "kokoro_tts",
                 "hira_dia_tts",
-                "zonos_tts"
+                "zonos_tts",
+                "dia_4bit_tts",
+                "tortoise_tts"
             ]
             
             # Create ordered service list
@@ -1017,6 +1154,7 @@ class EnhancedServiceManager:
                 "hira_dia_tts": "Hira Dia TTS",
                 "dia_4bit_tts": "Dia 4-bit TTS",  # Virtual service option
                 "zonos_tts": "Zonos TTS",
+                "tortoise_tts": "Tortoise TTS",
                 "mistral_llm": "Mistral LLM",
                 "gpt_llm": "GPT LLM"
             }
@@ -1255,7 +1393,7 @@ class EnhancedServiceManager:
         """Handle shutdown signals"""
         print(f"\n🛑 Received signal {signum}, shutting down...")
         self.running = False
-        self.stop_all_services()
+        # Note: Services remain running when manager is interrupted
 
     def manage_gpu_models(self):
         """Manage GPU model selection for LLM services"""

@@ -81,6 +81,7 @@ def launch_enhanced_service_manager():
         print("- Balanced: Kokoro TTS + GPT LLM") 
         print("- Efficient: Hira Dia TTS + Mistral LLM")
         print("- Quality: Hira Dia TTS + GPT LLM")
+        print("- Premium: Tortoise TTS + GPT LLM")
         print("- Individual service management")
         print("- Comprehensive testing")
         print()
@@ -114,9 +115,12 @@ def check_service_status():
     
     services = {
         "Main Orchestrator": "http://localhost:8000",
-        "Whisper STT": "http://localhost:8002", 
+        "Whisper STT": "http://localhost:8003", 
         "Kokoro TTS": "http://localhost:8011",
         "Hira Dia TTS": "http://localhost:8012",
+        "Dia 4-bit TTS": "http://localhost:8013",
+        "Zonos TTS": "http://localhost:8014", 
+        "Tortoise TTS": "http://localhost:8015",
         "Mistral LLM": "http://localhost:8021",
         "GPT LLM": "http://localhost:8022"
     }
