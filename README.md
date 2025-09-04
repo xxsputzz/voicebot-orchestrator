@@ -11,7 +11,7 @@
 
 This platform provides a complete solution for deploying production-ready voicebots with advanced AI capabilities:
 
-- **🎙️ Speech Processing**: OpenAI Whisper STT + Kokoro TTS
+- **🎙️ Speech Processing**: OpenAI Whisper STT + Multi-Engine TTS (Kokoro, Nari Dia, Zonos, Tortoise)
 - **🧠 Intelligence**: Mistral LLM with semantic caching & LoRA adapters  
 - **🏗️ Architecture**: 6 microservices with Docker & Kubernetes
 - **📊 Analytics**: Real-time performance monitoring & reporting
@@ -310,7 +310,7 @@ Start interactive mode and use these commands:
 - `status` - Display TTS engine status and GPU information
 - `speak <text>` - Generate speech with current engine
 - `auto <text>` - Auto-select best engine and generate speech
-- `kokoro` / `nari` - Switch between TTS engines
+- `kokoro` / `nari` / `zonos` / `tortoise` - Switch between TTS engines
 - `switch` - Interactive engine selection menu
 - `test` - Run engine comparison test
 - `conversation` - Start voice conversation mode
@@ -322,7 +322,7 @@ Start interactive mode and use these commands:
 
 ### 🎯 **TTS Engine Options**
 
-The CLI supports dual TTS engines with different strengths:
+The CLI supports multiple TTS engines with different strengths:
 
 #### **🚀 Kokoro TTS (Fast)**
 - **Speed**: ~0.8s generation (real-time capable)
@@ -337,6 +337,21 @@ The CLI supports dual TTS engines with different strengths:
 - **Requirements**: CUDA-enabled GPU
 - **Usage**: `--engine nari_dia` or `nari` in interactive mode
 
+#### **🎵 Zonos TTS (Neural Speech)**
+- **Speed**: ~2-5s generation (fast neural synthesis)
+- **Voice**: Multiple voice options with neural processing
+- **Best for**: High-quality speech with natural intonation
+- **Requirements**: GPU recommended for optimal performance
+- **Usage**: `--engine zonos` or `zonos` in interactive mode
+
+#### **🐢 Tortoise TTS (Ultra High-Quality)**
+- **Speed**: ~5-60 minutes generation (ultra high quality)
+- **Voices**: 20 available voices (angie, daniel, deniro, emma, freeman, geralt, halle, jlaw, lj, mol, myself, pat, rainbow, tom, train_atkins, train_dotrice, train_kennard, weaver, william, snakes)
+- **Best for**: Professional audio production, voice cloning, maximum quality output
+- **Requirements**: CUDA-enabled GPU with 8GB+ VRAM
+- **Usage**: `--engine tortoise` or `tortoise` in interactive mode
+- **Note**: Synthesis time scales with text length; use shorter texts for faster results
+
 ### 💡 **Usage Examples**
 
 #### **Quick Testing**
@@ -347,17 +362,29 @@ The CLI supports dual TTS engines with different strengths:
 # Test Kokoro (fast)
 .venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py --text "Testing Kokoro TTS"
 
+# Test Zonos (neural speech)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py --text "Testing Zonos TTS" --engine zonos
+
+# Test Tortoise (ultra high-quality)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py --text "Testing Tortoise TTS" --engine tortoise
+
 # Test performance
-.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py benchmark --engines kokoro
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py benchmark --engines kokoro,zonos,tortoise
 ```
 
 #### **Voice Conversation**
 ```bash
-# Start real-time conversation
+# Start real-time conversation (fastest)
 .venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py conversation --engine kokoro
+
+# Neural speech conversation (balanced)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py conversation --engine zonos
 
 # High-quality conversation (slower)
 .venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py conversation --engine nari_dia
+
+# Ultra high-quality conversation (slowest, professional audio)
+.venv\Scripts\python.exe voicebot_orchestrator\enhanced_cli.py conversation --engine tortoise
 ```
 
 #### **Development & Research**
