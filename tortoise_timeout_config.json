@@ -1,0 +1,23 @@
+{
+  "timeout_config": {
+    "base_overhead": 60.0,
+    "char_processing_time": 7.606915149614021,
+    "safety_buffer": 1.5,
+    "min_timeout": 300.0,
+    "max_timeout": 1800.0,
+    "retry_multipliers": [
+      1.0,
+      1.5,
+      2.0
+    ]
+  },
+  "performance_history": {
+    "jlaw_fast": [
+      {
+        "text_length": 383,
+        "actual_time": 2913.44850230217,
+        "char_per_second": 7.606915149614021
+      }
+    ]
+  }
+}

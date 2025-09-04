@@ -19,10 +19,18 @@ sys.path.insert(0, str(project_root))
 
 # Determine the correct Python executable (prefer virtual environment)
 def get_python_executable():
-    """Get the correct Python executable, preferring virtual environment"""
+    """Get the correct Python executable, preferring virtual environment with CUDA"""
+    # First, try virtual environment (has proper CUDA/PyTorch setup)
     venv_python = project_root / ".venv" / "Scripts" / "python.exe"
     if venv_python.exists():
         return str(venv_python)
+    
+    # Fallback to conda environment
+    conda_python = Path("C:/Users/miken/anaconda3/python.exe")
+    if conda_python.exists():
+        return str(conda_python)
+    
+    # Last resort: system python
     return sys.executable
 
 class EnhancedServiceManager:
@@ -94,7 +102,7 @@ class EnhancedServiceManager:
                 "description": "Tortoise TTS (Ultra High-Quality)",
                 "required": False,
                 "type": "tts",
-                "args": ["--direct"]
+                "args": ["--direct", "--gpu"]  # Force GPU usage
             },
             "mistral_llm": {
                 "script": "llm_mistral_service.py",
@@ -343,10 +351,11 @@ class EnhancedServiceManager:
                     python_exe, str(script_path)
                 ] + args, cwd=project_root)
             elif service_name == "tortoise_tts":
-                # Tortoise TTS needs --direct flag but with output capture to prevent log spam
+                # Tortoise TTS needs --direct flag and special working directory
+                # Don't capture output to avoid hanging during initialization
                 process = subprocess.Popen([
                     python_exe, str(script_path), "--direct"
-                ] + args, cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                ] + args, cwd=project_root)
             else:
                 # For other services, run normally
                 process = subprocess.Popen([

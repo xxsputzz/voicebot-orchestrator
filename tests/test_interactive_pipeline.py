@@ -1657,8 +1657,13 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                 presets_response = requests.get(f"{tortoise_url}/presets", timeout=5)
                 
                 if voices_response.status_code == 200:
-                    voices = voices_response.json()  # Direct list response
-                    if not isinstance(voices, list):
+                    response_data = voices_response.json()
+                    # Handle both direct list and object responses
+                    if isinstance(response_data, list):
+                        voices = response_data  # Direct list response
+                    elif isinstance(response_data, dict) and 'voices' in response_data:
+                        voices = response_data['voices']  # Object with voices key
+                    else:
                         voices = ['angie', 'denise', 'freeman']  # Fallback
                     print(f"🎭 Available voices: {', '.join(voices[:10])}{'...' if len(voices) > 10 else ''}")
                     print(f"   Total voices: {len(voices)}")
@@ -1676,7 +1681,12 @@ create smooth transitions, natural breathing patterns, and expressive delivery t
                     
             except Exception as e:
                 print(f"⚠️ Could not get voice/preset info: {e}")
-                voices = ['angie', 'denise', 'freeman', 'pat', 'william']
+                # Use enhanced official voices as fallback
+                voices = [
+                    'angie', 'daniel', 'deniro', 'emma', 'freeman', 'geralt', 'halle', 'jlaw', 
+                    'lj', 'mol', 'myself', 'pat', 'rainbow', 'tom', 'train_atkins', 
+                    'train_dotrice', 'train_kennard', 'weaver', 'william', 'snakes'
+                ]
                 presets = ['fast', 'standard', 'high_quality']
             
             # Voice selection - simplified two-column display
@@ -1810,7 +1820,7 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                 response = requests.post(
                     f"{tortoise_url}/synthesize",
                     json=synthesis_data,
-                    timeout=120  # Longer timeout for Tortoise
+                    timeout=300  # Extended timeout for GPU-accelerated Tortoise (5 minutes)
                 )
                 
                 synthesis_time = time.time() - start_time
@@ -2016,7 +2026,10 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                     print("❌ Invalid choice. Please enter 0-8.")
                 
                 if choice in ["1", "2", "3", "4", "6", "7", "8"]:
-                    input("\nPress Enter to continue...")
+                    try:
+                        input("\nPress Enter to continue...")
+                    except (EOFError, KeyboardInterrupt):
+                        print("\nContinuing...")
                     
             except KeyboardInterrupt:
                 print("\n\n👋 Goodbye!")
@@ -2024,7 +2037,10 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
             except Exception as e:
                 print(f"❌ Error: {e}")
                 traceback.print_exc()
-                input("\nPress Enter to continue...")
+                try:
+                    input("\nPress Enter to continue...")
+                except (EOFError, KeyboardInterrupt):
+                    print("\nContinuing...")
 
 async def main():
     """Main function"""
