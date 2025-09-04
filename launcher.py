@@ -95,7 +95,7 @@ def launch_original_orchestrator():
     print()
     
     try:
-        script_path = project_root / "start_server.py"
+        script_path = project_root / "scripts" / "utilities" / "start_server.py"
         if script_path.exists():
             subprocess.run([sys.executable, str(script_path)], cwd=project_root)
         else:
@@ -105,7 +105,7 @@ def launch_original_orchestrator():
         print("\n👋 Orchestrator closed by user")
     except Exception as e:
         print(f"❌ Error launching orchestrator: {e}")
-        print("Alternative: Try running 'python start_server.py' or 'uvicorn voicebot_orchestrator.main:app'")
+        print("Alternative: Try running 'python scripts/utilities/start_server.py' or 'uvicorn voicebot_orchestrator.main:app'")
 
 def check_service_status():
     """Check status of all services."""

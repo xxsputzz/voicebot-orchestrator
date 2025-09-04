@@ -53,7 +53,7 @@ class EnhancedServiceManager:
         # Service configurations matching existing patterns
         self.service_configs = {
             "orchestrator": {
-                "script": "start_server.py",
+                "script": "scripts/utilities/start_server.py",
                 "port": 8000,
                 "description": "Orchestrator (FastAPI)",
                 "required": False,
@@ -821,9 +821,13 @@ class EnhancedServiceManager:
         print(f"Use case: {combo['use_case']}")
         print("-" * 50)
         
-        # Special handling for efficient combo - using dedicated Dia 4-bit service
+        # Special handling for efficient combo - using dedicated Zonos neural TTS
         if combo_type == "efficient":
-            print("⚡ Using dedicated Dia 4-bit TTS service for maximum efficiency...")
+            print("🎵 Using Zonos TTS for neural speech synthesis with natural intonation...")
+        
+        # Special handling for quality combo - using GPT + Zonos combination  
+        if combo_type == "quality":
+            print("🎭 Using GPT LLM + Zonos TTS for high-quality neural speech with advanced reasoning...")
         
         success_count = 0
         for service_name in combo["services"]:
