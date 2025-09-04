@@ -11,6 +11,8 @@ import signal
 import atexit
 import requests
 import psutil
+import threading
+import concurrent.futures
 from pathlib import Path
 
 # Add the project root to Python path
@@ -41,7 +43,7 @@ class EnhancedServiceManager:
         self.running = False
         self._status_cache = {}
         self._status_cache_time = {}
-        self._cache_duration = 30  # Cache for 30 seconds (increased from 10)
+        self._cache_duration = 15  # Cache for 15 seconds (reduced from 30 for faster updates)
         self.intended_engine_mode = {}  # Track intended engine modes for services
         
         # Setup signal handlers for proper cleanup
@@ -611,6 +613,44 @@ class EnhancedServiceManager:
                 self._status_cache_time[service_name] = time.time()
             return False
     
+    def _check_single_service_health_parallel(self, service_name: str, timeout: float = 0.5) -> tuple:
+        """Check a single service health for parallel execution"""
+        config = self.service_configs[service_name]
+        try:
+            response = requests.get(f"http://localhost:{config['port']}/health", timeout=timeout)
+            is_healthy = response.status_code == 200
+            return (service_name, is_healthy)
+        except:
+            return (service_name, False)
+    
+    def check_all_services_parallel(self, timeout: float = 0.5) -> dict:
+        """Check all services in parallel for maximum speed"""
+        results = {}
+        
+        # Use ThreadPoolExecutor for parallel requests
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            # Submit all health checks at once
+            future_to_service = {
+                executor.submit(self._check_single_service_health_parallel, service_name, timeout): service_name
+                for service_name in self.service_configs.keys()
+            }
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_service, timeout=timeout + 0.5):
+                try:
+                    service_name, is_healthy = future.result()
+                    results[service_name] = is_healthy
+                    # Update cache
+                    self._status_cache[service_name] = is_healthy
+                    self._status_cache_time[service_name] = time.time()
+                except Exception as e:
+                    service_name = future_to_service[future]
+                    results[service_name] = False
+                    self._status_cache[service_name] = False
+                    self._status_cache_time[service_name] = time.time()
+        
+        return results
+    
     def invalidate_cache(self, service_name: str = None):
         """Invalidate status cache for specific service or all services"""
         if service_name:
@@ -664,64 +704,142 @@ class EnhancedServiceManager:
         
         return False
     
-    def handle_hira_dia_engine_switch_sync(self):
-        """Synchronous wrapper for engine switching"""
-        import asyncio
-        try:
-            asyncio.run(self.handle_hira_dia_engine_switch())
-        except Exception as e:
-            print(f"❌ Error switching engine: {e}")
-    
-    async def handle_hira_dia_engine_switch(self):
-        """Handle switching Hira Dia engine mode"""
-        print("\n🎭 Hira Dia Engine Mode Switching")
+    def run_tts_performance_comparison(self):
+        """Run performance comparison between different TTS engines"""
+        print("\n🎵 TTS Engine Performance Comparison")
         print("=" * 50)
         
-        # Get current status
-        current_engine = self.get_hira_dia_engine_status()
-        if not current_engine:
-            print("❌ Unable to get current engine status. Is the Hira Dia service running?")
-            return
-            
-        print(f"Current Engine: {current_engine}")
+        # Test text for comparison
+        test_text = "Hello, this is a performance test comparing different TTS engines for speed and quality."
         
-        # Show options
-        print("\nAvailable Engine Modes:")
-        print("1. 🎭 Full Dia (Quality Mode)")
-        print("2. ⚡ 4-bit Dia (Speed Mode)")  
-        print("3. 🤖 Auto (Smart Selection)")
-        print("0. Cancel")
+        print(f"📝 Test Text: {test_text}")
+        print(f"📊 Text Length: {len(test_text)} characters")
         
-        choice = input("\nSelect new engine mode (0-3): ").strip()
-        
-        engine_map = {
-            "1": "NARI_DIA",
-            "2": "DIA_4BIT", 
-            "3": "AUTO"
+        # Available TTS engines
+        tts_engines = {
+            "kokoro_tts": "Kokoro TTS (Fast)",
+            "zonos_tts": "Zonos TTS (Neural)", 
+            "tortoise_tts": "Tortoise TTS (Ultra Quality)"
         }
         
-        if choice == "0":
-            print("❌ Engine switch cancelled")
-            return
-        elif choice in engine_map:
-            new_engine = engine_map[choice]
-            print(f"🔄 Switching to {new_engine}...")
-            
-            result = self.switch_hira_dia_engine(new_engine)
-            if result:
-                print(f"✅ Successfully switched to {new_engine}")
-            else:
-                print(f"❌ Failed to switch to {new_engine}")
+        print("\n🎭 Available TTS Engines:")
+        for i, (service_name, description) in enumerate(tts_engines.items(), 1):
+            status = "✅ Running" if self.check_service_health(service_name, timeout=1) else "❌ Not Running"
+            print(f"  {i}. {description} - {status}")
+        
+        print("\n⚠️  Note: Only running services will be tested")
+        
+        # Test each running engine
+        results = {}
+        for service_name, description in tts_engines.items():
+            if self.check_service_health(service_name, timeout=1):
+                print(f"\n🧪 Testing {description}...")
+                try:
+                    # Simple performance test
+                    start_time = time.time()
+                    self.test_tts_service(service_name, test_text)
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    
+                    results[service_name] = {
+                        "description": description,
+                        "duration": duration,
+                        "status": "✅ Success"
+                    }
+                    print(f"   ⏱️  Completed in {duration:.2f} seconds")
+                except Exception as e:
+                    results[service_name] = {
+                        "description": description,
+                        "duration": 0,
+                        "status": f"❌ Failed: {str(e)[:50]}..."
+                    }
+                    print(f"   ❌ Failed: {e}")
+        
+        # Display results
+        if results:
+            print("\n📊 Performance Results:")
+            print("-" * 50)
+            for service_name, result in sorted(results.items(), key=lambda x: x[1]["duration"]):
+                duration = result["duration"]
+                if duration > 0:
+                    print(f"  {result['description']:<25} | {duration:.2f}s | {result['status']}")
+                else:
+                    print(f"  {result['description']:<25} | N/A    | {result['status']}")
         else:
-            print("❌ Invalid choice")
+            print("\n❌ No TTS engines are currently running")
+            print("   💡 Start some TTS services first using the service combinations")
+        
+        input("\nPress Enter to continue...")
+    
+    def test_tts_service(self, service_name: str, text: str = "Test"):
+        """Test TTS service with given text"""
+        config = self.service_configs[service_name]
+        port = config["port"]
+        
+        payload = {
+            "text": text,
+            "voice": "default"
+        }
+        
+        response = requests.post(f"http://localhost:{port}/synthesize", json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            raise Exception(f"HTTP {response.status_code}")
+        
+        result = response.json()
+        if not result.get("audio_base64"):
+            raise Exception("No audio data returned")
     
     def get_service_status(self, fast_mode: bool = False) -> dict:
-        """Get status of all services (including those running independently)"""
+        """Get status of all services (including those running independently) - OPTIMIZED"""
         status = {}
         
-        # In fast mode, use shorter timeouts and more aggressive caching
-        timeout = 1 if fast_mode else 2
+        # In fast mode, use parallel checking with very short timeouts
+        if fast_mode:
+            # Check if we have fresh cache for most services
+            current_time = time.time()
+            cached_services = []
+            needs_check = []
+            
+            for service_name in self.service_configs.keys():
+                if service_name in self._status_cache_time:
+                    cache_age = current_time - self._status_cache_time[service_name]
+                    if cache_age < self._cache_duration:
+                        cached_services.append(service_name)
+                    else:
+                        needs_check.append(service_name)
+                else:
+                    needs_check.append(service_name)
+            
+            # If most services are cached, use cache
+            if len(cached_services) >= len(needs_check):
+                # Use mostly cached data with parallel check for missing ones
+                if needs_check:
+                    parallel_results = {}
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=len(needs_check)) as executor:
+                        future_to_service = {
+                            executor.submit(self._check_single_service_health_parallel, service_name, 0.3): service_name
+                            for service_name in needs_check
+                        }
+                        
+                        for future in concurrent.futures.as_completed(future_to_service, timeout=0.5):
+                            try:
+                                service_name, is_healthy = future.result()
+                                parallel_results[service_name] = is_healthy
+                                self._status_cache[service_name] = is_healthy
+                                self._status_cache_time[service_name] = current_time
+                            except:
+                                service_name = future_to_service[future]
+                                parallel_results[service_name] = False
+                                self._status_cache[service_name] = False
+                                self._status_cache_time[service_name] = current_time
+                else:
+                    parallel_results = {}
+            else:
+                # Do full parallel check
+                parallel_results = self.check_all_services_parallel(timeout=0.3)
         
+        # Build status for all services
         for service_name, config in self.service_configs.items():
             if service_name in self.services:
                 # Service started by this manager
@@ -730,8 +848,12 @@ class EnhancedServiceManager:
                 
                 # Check if process is running
                 if process.poll() is None:
-                    # Check health endpoint
-                    healthy = self.check_service_health(service_name, timeout=timeout)
+                    # In fast mode, use parallel results; otherwise use regular check
+                    if fast_mode:
+                        healthy = parallel_results.get(service_name, self._status_cache.get(service_name, False))
+                    else:
+                        healthy = self.check_service_health(service_name, timeout=1)
+                    
                     status[service_name] = {
                         "status": "healthy" if healthy else "unhealthy",
                         "port": config["port"],
@@ -741,7 +863,6 @@ class EnhancedServiceManager:
                     }
                 else:
                     # Process has crashed - clean up and mark as stopped
-                    print(f"🔍 Detected crashed service: {service_name}, cleaning up...")
                     del self.services[service_name]
                     if service_name in self.intended_engine_mode:
                         del self.intended_engine_mode[service_name]
@@ -754,7 +875,11 @@ class EnhancedServiceManager:
                     }
             else:
                 # Check if service is running independently
-                healthy = self.check_service_health(service_name, timeout=timeout)
+                if fast_mode:
+                    healthy = parallel_results.get(service_name, self._status_cache.get(service_name, False))
+                else:
+                    healthy = self.check_service_health(service_name, timeout=1)
+                    
                 if healthy:
                     status[service_name] = {
                         "status": "healthy",
@@ -898,7 +1023,7 @@ class EnhancedServiceManager:
         print(f"✅ Stopped {stopped_count}/{len(running_services)} services")
     
     def test_running_services(self):
-        """Test all currently running services"""
+        """Test all currently running services with individual service testing option"""
         running_services = list(self.services.keys())
         
         if not running_services:
@@ -908,15 +1033,179 @@ class EnhancedServiceManager:
         print(f"\n🧪 Testing {len(running_services)} running services...")
         print("-" * 50)
         
-        # Basic health checks
-        for service_name in running_services:
-            config = self.service_configs[service_name]
-            healthy = self.check_service_health(service_name)
-            status_icon = "✅" if healthy else "❌"
-            print(f"  {status_icon} {config['description']} (Port {config['port']})")
+        # Show submenu for testing options
+        print("📋 Testing Options:")
+        print("  1. Test all running services")
+        print("  2. Test individual service")
+        print("  3. Test LLM services only")
+        print("  0. Back to main menu")
         
-        # Test service functionality if available
-        self.test_service_functionality()
+        choice = input("\n🎯 Choose testing option (0-3): ").strip()
+        
+        if choice == "1":
+            # Basic health checks for all services
+            for service_name in running_services:
+                config = self.service_configs[service_name]
+                healthy = self.check_service_health(service_name)
+                status_icon = "✅" if healthy else "❌"
+                print(f"  {status_icon} {config['description']} (Port {config['port']})")
+            
+            # Test service functionality if available
+            self.test_service_functionality()
+        elif choice == "2":
+            self.test_individual_service_menu()
+        elif choice == "3":
+            self.test_llm_services_only()
+        elif choice == "0":
+            return
+        else:
+            print("❌ Invalid choice")
+
+    def test_individual_service_menu(self):
+        """Interactive menu for testing individual services"""
+        running_services = list(self.services.keys())
+        
+        print(f"\n🔬 Select Service to Test:")
+        print("-" * 30)
+        
+        for i, service_name in enumerate(running_services, 1):
+            config = self.service_configs[service_name]
+            print(f"  {i}. {config['description']} (Port {config['port']})")
+        
+        print("  0. Back")
+        
+        try:
+            choice = int(input("\n🎯 Choose service to test (0-{}): ".format(len(running_services))).strip())
+            
+            if choice == 0:
+                return
+            elif 1 <= choice <= len(running_services):
+                service_name = running_services[choice - 1]
+                self.test_single_service(service_name)
+            else:
+                print("❌ Invalid choice")
+        except ValueError:
+            print("❌ Please enter a valid number")
+
+    def test_llm_services_only(self):
+        """Test only LLM services (Mistral and GPT)"""
+        print(f"\n🧠 Testing LLM Services Only")
+        print("-" * 30)
+        
+        llm_services = ["mistral_llm", "gpt_llm"]
+        running_llm_services = [service for service in llm_services if service in self.services]
+        
+        if not running_llm_services:
+            print("⚠️ No LLM services are currently running")
+            return
+        
+        for llm_service in running_llm_services:
+            try:
+                self.test_llm_service_detailed(llm_service)
+            except Exception as e:
+                print(f"  ❌ {llm_service} test error: {e}")
+
+    def test_single_service(self, service_name: str):
+        """Test a single service with detailed output"""
+        config = self.service_configs[service_name]
+        print(f"\n🔍 Testing {config['description']}...")
+        print("-" * 50)
+        
+        # Health check first
+        healthy = self.check_service_health(service_name)
+        status_icon = "✅" if healthy else "❌"
+        print(f"  {status_icon} Health Check: {config['description']} (Port {config['port']})")
+        
+        if not healthy:
+            print("  ⚠️ Service is not healthy, skipping functionality tests")
+            return
+        
+        # Run specific functionality test
+        try:
+            if "orchestrator" in service_name:
+                self.test_orchestrator_service()
+            elif "stt" in service_name:
+                self.test_stt_service(service_name)
+            elif "tts" in service_name:
+                self.test_tts_service(service_name)
+            elif "llm" in service_name:
+                self.test_llm_service_detailed(service_name)
+            else:
+                print(f"  ⚠️ No specific test available for {service_name}")
+        except Exception as e:
+            print(f"  ❌ Test error: {e}")
+
+    def test_llm_service_detailed(self, service_name: str):
+        """Detailed LLM service test with conversation management"""
+        config = self.service_configs[service_name]
+        port = config["port"]
+        
+        print(f"  🧠 Testing {config['description']} with conversation management...")
+        
+        try:
+            # Test basic generation
+            basic_payload = {
+                "text": "Hello, how are you?",
+                "use_cache": True
+            }
+            
+            response = requests.post(f"http://localhost:{port}/generate", json=basic_payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("response"):
+                    print(f"    ✅ Basic generation test passed")
+                    print(f"    💬 Response: {result['response'][:100]}...")
+                    print(f"    ⏱️  Processing time: {result.get('processing_time_seconds', 'N/A')}s")
+                    print(f"    🧠 Model used: {result.get('model_used', 'N/A')}")
+                    print(f"    📊 Cache hit: {result.get('cache_hit', False)}")
+                else:
+                    print(f"    ⚠️ No response text returned")
+            else:
+                print(f"    ❌ Basic test failed (Status: {response.status_code})")
+                return
+            
+            # Test with conversation management
+            conversation_payload = {
+                "text": "What is your name?",
+                "customer_phone": "test-phone-123",
+                "call_type": "inbound",
+                "use_cache": False  # Force fresh response
+            }
+            
+            response = requests.post(f"http://localhost:{port}/generate", json=conversation_payload, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                conversation_id = result.get("conversation_id")
+                if conversation_id:
+                    print(f"    ✅ Conversation management test passed")
+                    print(f"    🆔 Conversation ID: {conversation_id}")
+                    print(f"    💬 Response: {result['response'][:100]}...")
+                else:
+                    print(f"    ⚠️ Conversation ID not returned")
+            else:
+                print(f"    ❌ Conversation test failed (Status: {response.status_code})")
+            
+            # Test call type differentiation
+            for call_type in ["inbound", "outbound"]:
+                calltype_payload = {
+                    "text": "I want to apply for a loan",
+                    "call_type": call_type,
+                    "use_cache": False
+                }
+                
+                response = requests.post(f"http://localhost:{port}/generate", json=calltype_payload, timeout=30)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    print(f"    ✅ Call type test ({call_type}) passed")
+                    print(f"    💬 Response: {result['response'][:80]}...")
+                else:
+                    print(f"    ❌ Call type test ({call_type}) failed")
+                    
+        except Exception as e:
+            print(f"    ❌ Detailed test error: {e}")
     
     def test_service_functionality(self):
         """Test basic functionality of running services"""
@@ -1070,7 +1359,7 @@ class EnhancedServiceManager:
                 elif choice == "11":
                     self.manage_gpu_models()
                 elif choice == "12":
-                    self.handle_hira_dia_engine_switch_sync()
+                    self.run_tts_performance_comparison()
                 elif choice == "13":
                     self.force_stop_all_python_processes()
                 else:
@@ -1109,7 +1398,7 @@ class EnhancedServiceManager:
         
         print("\n🎮 Advanced Options:")
         print(" 11. Select GPU/LLM Model (8GB → AWS A100)")
-        print(" 12. Switch Hira Dia Engine Mode (Quality ↔ Speed)")
+        print(" 12. TTS Engine Performance Test (Compare All Engines)")
         print(" 13. Force Stop All Python Processes (Nuclear Option)")
         
         print("\n  0. Exit (services continue running)")
@@ -1119,6 +1408,8 @@ class EnhancedServiceManager:
         while True:
             print("\n🔧 Individual Service Management")
             print("-" * 40)
+            print("💡 Press Ctrl+C at any time to go back to main menu")
+            print("⚡ Using ultra-fast parallel status checking")
             
             # Check cache status
             current_time = time.time()
@@ -1135,16 +1426,16 @@ class EnhancedServiceManager:
             if show_loading:
                 print("🔍 Searching for service status...")
             else:
-                print("📋 Using cached service status...")
+                print("📋 Using cached service status (⚡ fast mode)...")
             
             # Use cached status for faster response (this will use cache if available)
             status = self.get_service_status(fast_mode=True)
             
             if show_loading:
                 print("✅ Status check complete!")
-            
-            # Define service order: Orchestrator → STT → LLM → TTS
-            service_order = [
+                
+                # Define service order: Orchestrator → STT → LLM → TTS
+                service_order = [
                 "orchestrator",
                 "whisper_stt", 
                 "mistral_llm",

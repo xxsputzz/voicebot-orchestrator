@@ -6,8 +6,12 @@ import sys
 import os
 from pathlib import Path
 
-# Add the project root to Python path
-project_root = Path(__file__).parent
+# Add the project root to Python path (go up 2 levels from scripts/utilities/)
+project_root = Path(__file__).parent.parent.parent
+# Also ensure we can find the project root from current working directory
+if (Path.cwd() / "voicebot_orchestrator").exists():
+    # If we're already in the project root directory
+    project_root = Path.cwd()
 sys.path.insert(0, str(project_root))
 
 def launch_in_new_terminal():
@@ -68,13 +72,13 @@ def main():
             )
             
         except KeyboardInterrupt:
-            print("\n👋 Shutting down Voicebot Orchestrator")
+            print("\nShutting down Voicebot Orchestrator")
         except ImportError as e:
-            print(f"❌ Missing dependency: {e}")
+            print(f"ERROR Missing dependency: {e}")
             print("   Please install requirements: pip install -r requirements.txt")
             sys.exit(1)
         except Exception as e:
-            print(f"💥 Startup failed: {e}")
+            print(f"ERROR Startup failed: {e}")
             sys.exit(1)
     else:
         # Try to launch in new terminal, fallback to current if it fails
@@ -84,7 +88,7 @@ def main():
                 import uvicorn
                 from voicebot_orchestrator.config import settings
                 
-                print("🚀 Starting Voicebot Orchestrator")
+                print("Starting Voicebot Orchestrator")
                 print(f"   Server: {settings.host}:{settings.port}")
                 print(f"   Log Level: {settings.log_level}")
                 print("   Press Ctrl+C to stop")
@@ -100,13 +104,13 @@ def main():
                 )
                 
             except KeyboardInterrupt:
-                print("\n👋 Shutting down Voicebot Orchestrator")
+                print("\nShutting down Voicebot Orchestrator")
             except ImportError as e:
-                print(f"❌ Missing dependency: {e}")
+                print(f"ERROR Missing dependency: {e}")
                 print("   Please install requirements: pip install -r requirements.txt")
                 sys.exit(1)
             except Exception as e:
-                print(f"💥 Startup failed: {e}")
+                print(f"ERROR Startup failed: {e}")
                 sys.exit(1)
 
 if __name__ == "__main__":

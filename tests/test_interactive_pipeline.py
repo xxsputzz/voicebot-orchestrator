@@ -23,11 +23,16 @@ import pyaudio
 import wave
 import threading
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
 import traceback
 from contextlib import contextmanager
+
+# Add aws_microservices to path for service management
+sys.path.append(str(Path(__file__).parent.parent / "aws_microservices"))
+from enhanced_service_manager import EnhancedServiceManager
 
 from contextlib import contextmanager
 
@@ -237,14 +242,14 @@ class InteractivePipelineTester:
         
         return chunks
         
-    def check_service_health(self, service_name: str, endpoint: str) -> bool:
+    def check_service_health(self, service_name: str, endpoint: str, timeout: float = 3) -> bool:
         """Check if a service is running and healthy"""
         try:
             # Try health endpoint first - disable requests logging to reduce noise
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             
-            health_response = requests.get(f"{endpoint}/health", timeout=3)
+            health_response = requests.get(f"{endpoint}/health", timeout=timeout)
             if health_response.status_code == 200:
                 return True
         except:
@@ -252,7 +257,7 @@ class InteractivePipelineTester:
         
         try:
             # Try root endpoint as fallback
-            root_response = requests.get(endpoint, timeout=3)
+            root_response = requests.get(endpoint, timeout=timeout)
             if root_response.status_code in [200, 404]:  # 404 is OK for some services
                 return True
         except:
@@ -279,6 +284,33 @@ class InteractivePipelineTester:
         self.available_services = available
         
         print(f"\n📊 Available: {len(available)} services")
+        return available
+    
+    def detect_services_by_types(self, required_types: list, fast_check: bool = True) -> Dict:
+        """Detect services of specific types only - optimized for speed"""
+        print("🔍 Checking service availability...")
+        print("-" * 40)
+        
+        available = {}
+        relevant_services = {name: config for name, config in self.all_services.items() 
+                           if config["type"] in required_types}
+        
+        # Use shorter timeout for fast check
+        timeout = 1 if fast_check else 3
+        
+        with suppress_http_logs():  # Suppress INFO logs during health checks
+            for service_name, config in relevant_services.items():
+                endpoint = config["url"]
+                if self.check_service_health(service_name, endpoint, timeout=timeout):
+                    available[service_name] = config
+                    print(f"  ✅ {service_name:<20} - {endpoint}")
+                else:
+                    print(f"  ❌ {service_name:<20} - Not available")
+        
+        # Update available services (don't overwrite, just add found ones)
+        self.available_services.update(available)
+        
+        print(f"\n📊 Available {'/'.join(required_types).upper()} services: {len(available)}")
         return available
     
     def select_services_by_type(self, service_type: str) -> Optional[str]:
@@ -951,6 +983,236 @@ class InteractivePipelineTester:
                 
         except Exception as e:
             print(f"❌ Full pipeline test failed: {e}")
+            traceback.print_exc()
+            return False
+    
+    async def test_stt_only(self) -> bool:
+        """Test STT service only with recorded audio or microphone input"""
+        print("\n🎙️ STT Only Test (Speech Recognition)")
+        print("=" * 50)
+        
+        # Check only STT services
+        print("🔍 Checking STT service availability...")
+        print("-" * 40)
+        
+        stt_service_configs = {
+            "whisper_stt": {"url": "http://localhost:8003", "type": "stt"}
+        }
+        
+        available_stt_services = {}
+        
+        for service_name, config in stt_service_configs.items():
+            try:
+                response = requests.get(f"{config['url']}/health", timeout=2)
+                if response.status_code == 200:
+                    print(f"  ✅ {service_name:<20} - {config['url']}")
+                    available_stt_services[service_name] = config
+                else:
+                    print(f"  ❌ {service_name:<20} - Not available")
+            except:
+                print(f"  ❌ {service_name:<20} - Not available")
+        
+        if not available_stt_services:
+            print("\n❌ No STT services available")
+            print("   Start the STT service first using the service manager")
+            return False
+        
+        print(f"\n📊 Available STT services: {len(available_stt_services)}")
+        
+        # Auto-select the first available STT service
+        stt_service = list(available_stt_services.keys())[0]
+        stt_config = available_stt_services[stt_service]
+        print(f"✅ Selected STT service: {stt_service} ({stt_config['url']})")
+        
+        # Display Whisper version information
+        print("\n📋 Whisper Version Information:")
+        try:
+            import whisper
+            print(f"   📦 OpenAI Whisper: v{whisper.__version__}")
+        except:
+            print("   📦 OpenAI Whisper: Version detection failed")
+        
+        try:
+            import faster_whisper
+            print(f"   🚀 Faster Whisper: v{faster_whisper.__version__}")
+            print("   💡 Faster Whisper is available - consider upgrading for 2-4x speedup!")
+        except:
+            print("   🚀 Faster Whisper: Not installed")
+            print("   💡 Install with: pip install faster-whisper")
+        
+        # Test input options
+        print("\n🎤 Audio Input Options:")
+        print("  1. Use sample audio file")
+        print("  2. Record from microphone (5 seconds)")
+        print("  3. Upload custom audio file")
+        
+        choice = input("Select input method (1-3): ").strip()
+        
+        audio_data = None
+        filename = None
+        
+        if choice == "1":
+            # Look for sample audio files
+            sample_paths = [
+                "tests/audio_samples/test_audio.wav",
+                "audio_output/tortoise_20250904_074512_angie_Hi_this_is_Alex_with_Finally.wav",
+                "tests/audio_samples/interactive_pipeline/llm_to_tts_gpt_llm_zonos_tts_20250904_143628.wav"
+            ]
+            
+            for sample_path in sample_paths:
+                if os.path.exists(sample_path):
+                    print(f"📁 Using sample audio: {sample_path}")
+                    with open(sample_path, 'rb') as f:
+                        audio_data = f.read()
+                    filename = os.path.basename(sample_path)
+                    break
+            
+            if not audio_data:
+                print("❌ No sample audio files found")
+                return False
+        
+        elif choice == "2":
+            # Record from microphone
+            try:
+                import pyaudio
+                import wave
+                import tempfile
+                
+                print("🎙️ Recording from microphone for 5 seconds...")
+                print("   Speak now...")
+                
+                # Recording parameters
+                CHUNK = 1024
+                FORMAT = pyaudio.paInt16
+                CHANNELS = 1
+                RATE = 16000
+                RECORD_SECONDS = 5
+                
+                p = pyaudio.PyAudio()
+                
+                stream = p.open(format=FORMAT,
+                              channels=CHANNELS,
+                              rate=RATE,
+                              input=True,
+                              frames_per_buffer=CHUNK)
+                
+                frames = []
+                for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
+                    data = stream.read(CHUNK)
+                    frames.append(data)
+                
+                stream.stop_stream()
+                stream.close()
+                p.terminate()
+                
+                # Save to temporary file
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                    temp_path = f.name
+                
+                wf = wave.open(temp_path, 'wb')
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(p.get_sample_size(FORMAT))
+                wf.setframerate(RATE)
+                wf.writeframes(b''.join(frames))
+                wf.close()
+                
+                # Read the recorded audio
+                with open(temp_path, 'rb') as f:
+                    audio_data = f.read()
+                filename = "recorded_audio.wav"
+                
+                # Clean up
+                os.unlink(temp_path)
+                
+                print("✅ Recording complete!")
+                
+            except ImportError:
+                print("❌ PyAudio not available for recording")
+                print("   Install with: pip install pyaudio")
+                return False
+            except Exception as e:
+                print(f"❌ Recording failed: {e}")
+                return False
+        
+        elif choice == "3":
+            # Upload custom audio file
+            file_path = input("Enter path to audio file: ").strip()
+            if not os.path.exists(file_path):
+                print(f"❌ File not found: {file_path}")
+                return False
+            
+            try:
+                with open(file_path, 'rb') as f:
+                    audio_data = f.read()
+                filename = os.path.basename(file_path)
+                print(f"✅ Loaded audio file: {filename}")
+            except Exception as e:
+                print(f"❌ Failed to load audio file: {e}")
+                return False
+        
+        else:
+            print("❌ Invalid choice")
+            return False
+        
+        if not audio_data:
+            print("❌ No audio data available")
+            return False
+        
+        # Send to STT service
+        try:
+            print(f"\n🔄 Sending audio to STT service: {stt_config['url']}")
+            print(f"   Audio size: {len(audio_data):,} bytes")
+            
+            import time
+            start_time = time.time()
+            
+            files = {'audio': (filename, audio_data, 'audio/wav')}
+            response = requests.post(f"{stt_config['url']}/transcribe", files=files, timeout=30)
+            
+            processing_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                # Debug: Print the full JSON response to understand the issue
+                print(f"🔍 DEBUG: Full STT response JSON: {result}")
+                print(f"🔍 DEBUG: Response keys: {list(result.keys())}")
+                
+                # Fix: Handle multiple possible field names from different STT services
+                # stt_whisper_service.py uses 'text', stt_service.py uses 'transcript'
+                transcription = result.get('transcript', result.get('transcription', result.get('text', 'No transcription returned')))
+                confidence = result.get('confidence', 'N/A')
+                
+                print(f"✅ STT transcription successful!")
+                print(f"📝 Transcribed text: '{transcription}'")
+                print(f"🎯 Confidence: {confidence}")
+                print(f"⏱️ Processing time: {processing_time:.2f} seconds")
+                
+                # Save results
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                results_dir = Path("tests/audio_samples/stt_results")
+                results_dir.mkdir(parents=True, exist_ok=True)
+                
+                result_file = results_dir / f"stt_test_{timestamp}.txt"
+                with open(result_file, 'w', encoding='utf-8') as f:
+                    f.write(f"STT Test Results - {datetime.now()}\n")
+                    f.write(f"Service: {stt_service} ({stt_config['url']})\n")
+                    f.write(f"Audio file: {filename}\n")
+                    f.write(f"Processing time: {processing_time:.2f}s\n")
+                    f.write(f"Confidence: {confidence}\n")
+                    f.write(f"Transcription: {transcription}\n")
+                
+                print(f"💾 Results saved: {result_file}")
+                return True
+            
+            else:
+                print(f"❌ STT request failed: {response.status_code}")
+                print(f"   Response: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ STT test failed: {e}")
+            import traceback
             traceback.print_exc()
             return False
     
@@ -1907,7 +2169,6 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
     
     async def run_interactive_tests(self):
         """Run interactive test menu without automatic service checks"""
-        print("🎯 Interactive Pipeline Tester")
         
         while True:
             print("\n" + "="*60)
@@ -1922,14 +2183,20 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
             
             print("\n🔍 SERVICE TESTS:")
             print("  5. Check service availability")
-            print("  6. Test Direct Dia TTS (with EOS analysis)")
-            print("  7. Test Direct Zonos TTS (neural speech synthesis)")
-            print("  8. Test Direct Tortoise TTS (ultra high-quality voice synthesis)")
+            print("  6. Test STT Only (speech recognition)")
+            print("  7. Test Direct Dia TTS (with EOS analysis)")
+            print("  8. Test Direct Zonos TTS (neural speech synthesis)")
+            print("  9. Test Direct Tortoise TTS (ultra high-quality voice synthesis)")
+            
+            print("\n🔧 SERVICE MANAGEMENT:")
+            print(" 10. Manage Orchestrator & STT Services")
+            print(" 11. Manage LLM Services")
+            print(" 12. Manage TTS Services")
             
             print("\n  0. Exit")
             
             try:
-                choice = input("\nSelect test type (0-8): ").strip()
+                choice = input("\nSelect test type (0-12): ").strip()
                 
                 if choice == "0":
                     print("👋 Goodbye!")
@@ -1937,8 +2204,8 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                 
                 elif choice == "1":
                     print("\n🎙️ STT → LLM Test")
-                    # Check services first for this test
-                    self.detect_available_services()
+                    # Quick check for only STT and LLM services (not orchestrator)
+                    self.detect_services_by_types(["stt", "llm"], fast_check=True)
                     stt_service = self.select_services_by_type("stt")
                     if not stt_service:
                         continue
@@ -1952,8 +2219,8 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                 
                 elif choice == "2":
                     print("\n🧠 LLM → TTS Test")
-                    # Check services first for this test
-                    self.detect_available_services()
+                    # Quick check for only LLM and TTS services
+                    self.detect_services_by_types(["llm", "tts"], fast_check=True)
                     llm_service = self.select_services_by_type("llm")
                     if not llm_service:
                         continue
@@ -1967,8 +2234,8 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                 
                 elif choice == "3":
                     print("\n🎯 Full Pipeline Test")
-                    # Check services first for this test
-                    self.detect_available_services()
+                    # Quick check for STT, LLM, and TTS services only
+                    self.detect_services_by_types(["stt", "llm", "tts"], fast_check=True)
                     stt_service = self.select_services_by_type("stt")
                     if not stt_service:
                         continue
@@ -1996,7 +2263,9 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                     print(f"\n📊 Result: {result}")
                 
                 elif choice == "5":
-                    self.detect_available_services()
+                    # Fast service availability check with parallel processing
+                    print("⚡ Using fast parallel service checking...")
+                    self.detect_services_by_types(["stt", "llm", "tts"], fast_check=True)
                     print("\n📋 Available Services:")
                     if not self.available_services:
                         print("  ❌ No services available")
@@ -2007,25 +2276,41 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                             print(f"  ✅ {service_name:<20} ({service_type:<3}) - {url}")
                 
                 elif choice == "6":
-                    print("\n🎯 Direct Dia TTS Test with EOS Analysis")
-                    success = await self.test_direct_dia_tts()
+                    success = await self.test_stt_only()
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
                 elif choice == "7":
-                    success = await self.test_direct_zonos_tts()
+                    success = await self.test_direct_dia_tts()
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
                 elif choice == "8":
+                    success = await self.test_direct_zonos_tts()
+                    result = "✅ SUCCESS" if success else "❌ FAILED"
+                    print(f"\n📊 Result: {result}")
+                
+                elif choice == "9":
                     success = await self.test_direct_tortoise_tts()
                     result = "✅ SUCCESS" if success else "❌ FAILED"
                     print(f"\n📊 Result: {result}")
                 
-                else:
-                    print("❌ Invalid choice. Please enter 0-8.")
+                elif choice == "10":
+                    print("\n🔧 Orchestrator & STT Service Management")
+                    self.manage_orchestrator_stt_services()
                 
-                if choice in ["1", "2", "3", "4", "6", "7", "8"]:
+                elif choice == "11":
+                    print("\n🧠 LLM Service Management")
+                    self.manage_llm_services()
+                
+                elif choice == "12":
+                    print("\n🔊 TTS Service Management")
+                    self.manage_tts_services()
+                
+                else:
+                    print("❌ Invalid choice. Please enter 0-12.")
+                
+                if choice in ["1", "2", "3", "4", "6", "7", "8", "9", "10", "11"]:
                     try:
                         input("\nPress Enter to continue...")
                     except (EOFError, KeyboardInterrupt):
@@ -2041,6 +2326,173 @@ I can convey subtle nuances in tone, rhythm, and emphasis that bring text to lif
                     input("\nPress Enter to continue...")
                 except (EOFError, KeyboardInterrupt):
                     print("\nContinuing...")
+    
+    def manage_orchestrator_stt_services(self):
+        """Manage Orchestrator and STT services"""
+        orchestrator_stt_services = ["orchestrator", "whisper_stt"]
+        self._manage_service_category("Orchestrator & STT", orchestrator_stt_services)
+    
+    def manage_llm_services(self):
+        """Manage LLM services"""
+        llm_services = ["mistral_llm", "gpt_llm"]
+        self._manage_service_category("LLM", llm_services)
+    
+    def manage_tts_services(self):
+        """Manage TTS services"""
+        tts_services = ["kokoro_tts", "hira_dia_tts", "zonos_tts", "dia_4bit_tts", "tortoise_tts"]
+        self._manage_service_category("TTS", tts_services)
+    
+    def _manage_service_category(self, category_name: str, service_filter: list):
+        """Generic service management for a specific category"""
+        try:
+            # Initialize service manager
+            service_manager = EnhancedServiceManager()
+            
+            while True:
+                print(f"\n🔧 {category_name} Service Management")
+                print("-" * 50)
+                
+                # Get service status using the service manager
+                print("🔍 Checking service status...")
+                status = service_manager.get_service_status(fast_mode=True)
+                
+                # Filter services by category
+                service_list = [(name, service_manager.service_configs[name]) 
+                              for name in service_filter 
+                              if name in service_manager.service_configs]
+                
+                if not service_list:
+                    print(f"❌ No {category_name.lower()} services configured")
+                    input("\nPress Enter to continue...")
+                    break
+                
+                # Create simplified service names
+                service_names = {
+                    "orchestrator": "Orchestrator",
+                    "whisper_stt": "Whisper STT", 
+                    "kokoro_tts": "Kokoro TTS",
+                    "hira_dia_tts": "Hira Dia TTS",
+                    "dia_4bit_tts": "Dia 4-bit TTS",
+                    "zonos_tts": "Zonos TTS",
+                    "tortoise_tts": "Tortoise TTS",
+                    "mistral_llm": "Mistral LLM",
+                    "gpt_llm": "GPT LLM"
+                }
+                
+                # Display services for this category
+                for i, (service_name, config) in enumerate(service_list, 1):
+                    service_status = status[service_name]["status"]
+                    status_icon = {
+                        "healthy": "✅",
+                        "unhealthy": "⚠️",
+                        "crashed": "❌",
+                        "stopped": "⏹️"
+                    }.get(service_status, "❓")
+                    
+                    action = "Stop" if service_status in ["healthy", "unhealthy"] else "Start"
+                    simple_name = service_names.get(service_name, config['description'])
+                    service_desc = f"{action} {simple_name}"
+                    
+                    # Format status text
+                    if service_status == "stopped":
+                        status_text = f"({status_icon}  {service_status})"
+                    else:
+                        status_text = f"({status_icon} {service_status})"
+                    
+                    print(f"  {i}. {service_desc:<35} {status_text}")
+                
+                print("\n  r. Refresh status")
+                print("  s. Start all services in this category")
+                print("  x. Stop all services in this category")
+                print("  0. Back to test menu")
+                
+                try:
+                    choice = input(f"\nSelect option (0-{len(service_list)}, r, s, x): ").strip().lower()
+                    
+                    if choice == "0":
+                        break
+                    elif choice == "r":
+                        service_manager.invalidate_cache()
+                        print("✅ Status refreshed")
+                        continue
+                    elif choice == "s":
+                        print(f"\n🚀 Starting all {category_name.lower()} services...")
+                        for service_name, config in service_list:
+                            service_status = status[service_name]["status"]
+                            if service_status == "stopped":
+                                simple_name = service_names.get(service_name, config['description'])
+                                print(f"  🎯 Starting {simple_name}...")
+                                success = service_manager.start_service(service_name)
+                                if success:
+                                    print(f"    ✅ {simple_name} started")
+                                else:
+                                    print(f"    ❌ Failed to start {simple_name}")
+                            else:
+                                simple_name = service_names.get(service_name, config['description'])
+                                print(f"  ⏭️  {simple_name} already running")
+                        service_manager.invalidate_cache()
+                        time.sleep(2)
+                        continue
+                    elif choice == "x":
+                        print(f"\n🛑 Stopping all {category_name.lower()} services...")
+                        for service_name, config in service_list:
+                            service_status = status[service_name]["status"]
+                            if service_status in ["healthy", "unhealthy"]:
+                                simple_name = service_names.get(service_name, config['description'])
+                                print(f"  🎯 Stopping {simple_name}...")
+                                success = service_manager.stop_service(service_name)
+                                if success:
+                                    print(f"    ✅ {simple_name} stopped")
+                                else:
+                                    print(f"    ❌ Failed to stop {simple_name}")
+                            else:
+                                simple_name = service_names.get(service_name, config['description'])
+                                print(f"  ⏭️  {simple_name} already stopped")
+                        service_manager.invalidate_cache()
+                        time.sleep(2)
+                        continue
+                    elif choice.isdigit() and 1 <= int(choice) <= len(service_list):
+                        choice_num = int(choice)
+                        service_name = service_list[choice_num - 1][0]
+                        config = service_list[choice_num - 1][1]
+                        service_status = status[service_name]["status"]
+                        simple_name = service_names.get(service_name, config['description'])
+                        
+                        print(f"\n🎯 Managing {simple_name}...")
+                        
+                        if service_status in ["healthy", "unhealthy"]:
+                            success = service_manager.stop_service(service_name)
+                            if success:
+                                print(f"✅ {simple_name} stopped successfully")
+                            else:
+                                print(f"❌ Failed to stop {simple_name}")
+                        else:
+                            success = service_manager.start_service(service_name)
+                            if success:
+                                print(f"✅ {simple_name} started successfully")
+                            else:
+                                print(f"❌ Failed to start {simple_name}")
+                        
+                        # Auto-refresh status after any start/stop operation
+                        print("🔄 Refreshing status...")
+                        service_manager.invalidate_cache()
+                        time.sleep(1)  # Give service a moment to change state
+                        continue
+                    else:
+                        print("❌ Invalid choice")
+                        
+                except (EOFError, KeyboardInterrupt):
+                    print("\nReturning to test menu...")
+                    break
+                except Exception as e:
+                    print(f"❌ Service management error: {e}")
+                    break
+                    
+        except ImportError:
+            print("❌ Service management not available - enhanced_service_manager not found")
+            print("   This feature requires the Enhanced Service Manager to be available")
+        except Exception as e:
+            print(f"❌ Failed to initialize service management: {e}")
 
 async def main():
     """Main function"""

@@ -21,6 +21,12 @@ import re
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from voicebot_orchestrator.enhanced_llm import EnhancedMistralLLM
 
+# Import prompt loader for dynamic prompt injection
+from prompt_loader import prompt_loader
+
+# Import conversation manager for context tracking
+from conversation_manager import ConversationManager
+
 # EMOJI PURGING: Comprehensive emoji detection and removal (matching GPT service)
 def _purge_emojis_from_llm_response(text: str) -> str:
     """
@@ -75,6 +81,9 @@ app.add_middleware(
 # Global LLM instance - Mistral only
 llm_service = None
 
+# Global conversation manager for context tracking
+conversation_manager = ConversationManager()
+
 class GenerateRequest(BaseModel):
     text: str
     use_cache: Optional[bool] = True
@@ -82,6 +91,9 @@ class GenerateRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, str]]] = None
     max_tokens: Optional[int] = 512
     temperature: Optional[float] = 0.7
+    call_type: Optional[str] = None  # "inbound", "outbound", or None
+    conversation_id: Optional[str] = None  # For conversation tracking
+    customer_phone: Optional[str] = None   # For finding existing conversations
 
 class GenerateResponse(BaseModel):
     response: str
@@ -89,6 +101,8 @@ class GenerateResponse(BaseModel):
     model_used: str
     cache_hit: bool
     tokens_generated: int
+    conversation_id: Optional[str] = None  # Track conversation for client-side management
+    conversation_id: Optional[str] = None  # Return conversation ID for tracking
 
 @app.on_event("startup")
 async def startup_event():
@@ -180,12 +194,73 @@ async def generate_response(request: GenerateRequest) -> GenerateResponse:
         if len(request.text) > 2000:
             raise HTTPException(status_code=400, detail="Text input too long (max 2000 characters)")
         
-        # Generate response using Mistral
+        # Handle conversation context
+        conversation_context = None
+        conversation_id = request.conversation_id
+        
+        # Try to find existing conversation for customer
+        if not conversation_id and request.customer_phone:
+            conversation_id = conversation_manager.find_active_conversation(request.customer_phone)
+        
+        # Get or create conversation context
+        if conversation_id:
+            conversation_context = conversation_manager.get_conversation_context(conversation_id)
+            if not conversation_context:
+                # Conversation ID provided but not found, start new one
+                conversation_id = conversation_manager.start_conversation(
+                    request.customer_phone, 
+                    request.call_type or "general"
+                )
+                conversation_context = conversation_manager.get_conversation_context(conversation_id)
+        else:
+            # Start new conversation
+            conversation_id = conversation_manager.start_conversation(
+                request.customer_phone, 
+                request.call_type or "general"
+            )
+            conversation_context = conversation_manager.get_conversation_context(conversation_id)
+        
+        # Use conversation history from database if not provided in request
+        conversation_history = request.conversation_history
+        if not conversation_history and conversation_context:
+            # Convert database format to LLM format
+            db_history = conversation_context["recent_history"]
+            conversation_history = [
+                {"role": msg["role"], "content": msg["content"]} 
+                for msg in db_history
+            ]
+        
+        # Load system prompts with conversation awareness
+        system_prompt = prompt_loader.get_system_prompt(call_type=request.call_type)
+        
+        # Add conversation context to system prompt
+        if conversation_context and not conversation_context["is_first_interaction"]:
+            context_note = f"""
+CONVERSATION CONTEXT:
+- This is a CONTINUING conversation (message #{conversation_context['message_count'] + 1})
+- DO NOT introduce yourself again as Alex
+- DO NOT repeat company name unless specifically relevant
+- Continue naturally from the previous interaction
+- Current conversation state: {conversation_context['conversation_state']}
+"""
+            system_prompt = system_prompt + context_note
+        
+        # Combine system prompt with domain context if provided
+        enhanced_context = request.domain_context or ""
+        if system_prompt:
+            enhanced_context = system_prompt + "\n\n" + enhanced_context if enhanced_context else system_prompt
+            call_type_info = f" (call_type: {request.call_type})" if request.call_type else ""
+            logging.info(f"[PROMPT_INJECTION] Added system prompt ({len(system_prompt)} chars) to Mistral LLM{call_type_info}")
+            
+        # Add user message to conversation history
+        conversation_manager.add_message(conversation_id, "user", request.text)
+        
+        # Generate response using Mistral with enhanced context
         response = await llm_service.generate_response(
             user_input=request.text,
-            conversation_history=request.conversation_history,
+            conversation_history=conversation_history,
             use_cache=request.use_cache,
-            domain_context=request.domain_context
+            domain_context=enhanced_context
         )
         
         # EMOJI PURGING: Remove emojis from LLM response to prevent TTS encoding issues
@@ -193,6 +268,9 @@ async def generate_response(request: GenerateRequest) -> GenerateResponse:
         response = _purge_emojis_from_llm_response(response)
         if response != original_response:
             logging.info(f"[EMOJI_PURGE_LLM] Cleaned emoji from Mistral LLM response")
+        
+        # Add assistant response to conversation history
+        conversation_manager.add_message(conversation_id, "assistant", response)
         
         processing_time = time.time() - start_time
         
@@ -205,7 +283,8 @@ async def generate_response(request: GenerateRequest) -> GenerateResponse:
             processing_time_seconds=round(processing_time, 3),
             model_used="mistral",
             cache_hit=cache_hit,
-            tokens_generated=len(response.split())  # Approximate token count
+            tokens_generated=len(response.split()),  # Approximate token count
+            conversation_id=conversation_id  # Return conversation ID for tracking
         )
         
     except Exception as e:
@@ -340,6 +419,56 @@ async def get_adapter_info():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get adapter info: {str(e)}")
+
+# PROMPT MANAGEMENT ENDPOINTS
+@app.get("/prompts")
+async def get_prompts_info():
+    """Get information about loaded prompts"""
+    try:
+        available_prompts = prompt_loader.get_available_prompts()
+        system_prompt = prompt_loader.get_system_prompt()
+        
+        return {
+            "model": "mistral",
+            "prompts_directory": str(prompt_loader.get_prompts_directory()),
+            "available_prompts": available_prompts,
+            "total_prompts": len(available_prompts),
+            "system_prompt_length": len(system_prompt),
+            "system_prompt_preview": system_prompt[:200] + "..." if len(system_prompt) > 200 else system_prompt
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prompts info: {str(e)}")
+
+@app.post("/prompts/reload")
+async def reload_prompts():
+    """Reload prompts from the docs/prompts folder"""
+    try:
+        prompts = prompt_loader.reload_prompts()
+        return {
+            "message": "Prompts reloaded successfully",
+            "total_prompts": len(prompts),
+            "loaded_prompts": list(prompts.keys())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload prompts: {str(e)}")
+
+@app.get("/prompts/{prompt_name}")
+async def get_specific_prompt(prompt_name: str):
+    """Get content of a specific prompt file"""
+    try:
+        prompts = prompt_loader.load_all_prompts()
+        if prompt_name not in prompts:
+            raise HTTPException(status_code=404, detail=f"Prompt '{prompt_name}' not found")
+        
+        return {
+            "prompt_name": prompt_name,
+            "content": prompts[prompt_name],
+            "length": len(prompts[prompt_name])
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prompt: {str(e)}")
 
 if __name__ == "__main__":
     # Configure logging

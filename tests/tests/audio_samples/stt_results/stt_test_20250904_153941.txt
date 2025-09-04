@@ -1,0 +1,6 @@
+STT Test Results - 2025-09-04 15:39:41.782524
+Service: whisper_stt (http://localhost:8003)
+Audio file: recorded_audio.wav
+Processing time: 2.51s
+Confidence: 0.95
+Transcription: Alright, this is just a test.

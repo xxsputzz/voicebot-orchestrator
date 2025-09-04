@@ -29,6 +29,12 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from voicebot_orchestrator.enhanced_llm import EnhancedMistralLLM  # We'll adapt this for GPT
 
+# Import prompt loader for dynamic prompt injection
+from prompt_loader import prompt_loader
+
+# Import conversation manager for context awareness
+from conversation_manager import ConversationManager
+
 # EMOJI PURGING: Comprehensive emoji detection and removal
 def _purge_emojis_from_llm_response(text: str) -> str:
     """
@@ -83,6 +89,9 @@ app.add_middleware(
 # Global LLM instance - GPT only
 llm_service = None
 
+# Global conversation manager for context tracking
+conversation_manager = ConversationManager()
+
 class GenerateRequest(BaseModel):
     text: str
     use_cache: Optional[bool] = True
@@ -92,6 +101,9 @@ class GenerateRequest(BaseModel):
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 0.9
     frequency_penalty: Optional[float] = 0.0
+    call_type: Optional[str] = None  # "inbound", "outbound", or None
+    conversation_id: Optional[str] = None  # For conversation continuity
+    customer_phone: Optional[str] = None  # For conversation identification
 
 class GenerateResponse(BaseModel):
     response: str
@@ -99,6 +111,7 @@ class GenerateResponse(BaseModel):
     model_used: str
     cache_hit: bool
     tokens_generated: int
+    conversation_id: Optional[str] = None  # Track conversation for client-side management
 
 @app.on_event("startup")
 async def startup_event():
@@ -237,7 +250,7 @@ async def health_check():
 @app.post("/generate", response_model=GenerateResponse)
 async def generate_response(request: GenerateRequest) -> GenerateResponse:
     """
-    Generate response using GPT LLM
+    Generate response using GPT LLM with conversation management
     """
     if not llm_service:
         raise HTTPException(status_code=503, detail="GPT LLM service not ready")
@@ -252,19 +265,62 @@ async def generate_response(request: GenerateRequest) -> GenerateResponse:
         if len(request.text) > 3000:  # GPT can handle longer context
             raise HTTPException(status_code=400, detail="Text input too long (max 3000 characters)")
         
-        # Generate response using GPT
+        # CONVERSATION MANAGEMENT: Handle conversation continuity
+        conversation_id = request.conversation_id
+        
+        # Start new conversation if needed
+        if not conversation_id and request.customer_phone:
+            conversation_id = conversation_manager.start_conversation(request.customer_phone)
+            logging.info(f"[CONVERSATION] Started new conversation {conversation_id} for {request.customer_phone}")
+        elif conversation_id:
+            logging.info(f"[CONVERSATION] Continuing conversation {conversation_id}")
+        
+        # Add user message to conversation history
+        if conversation_id:
+            conversation_manager.add_message(conversation_id, "user", request.text)
+            
+            # Get recent conversation context (last 10 messages for memory efficiency)
+            conversation_context = conversation_manager.get_conversation_history(conversation_id, limit=10)
+            
+            # Use conversation history instead of passed history for consistency
+            if conversation_context:
+                logging.info(f"[CONVERSATION] Using {len(conversation_context)} messages from conversation history")
+                # Convert to the format expected by the LLM
+                formatted_history = []
+                for msg in conversation_context:
+                    if msg["role"] == "user":
+                        formatted_history.append({"human": msg["content"]})
+                    elif msg["role"] == "assistant":
+                        formatted_history.append({"assistant": msg["content"]})
+                request.conversation_history = formatted_history
+        
+        # Load system prompts from docs/prompts folder with call type awareness
+        system_prompt = prompt_loader.get_system_prompt(call_type=request.call_type)
+        
+        # Combine system prompt with domain context if provided
+        enhanced_context = request.domain_context or ""
+        if system_prompt:
+            enhanced_context = system_prompt + "\n\n" + enhanced_context if enhanced_context else system_prompt
+            call_type_info = f" (call_type: {request.call_type})" if request.call_type else ""
+            logging.info(f"[PROMPT_INJECTION] Added system prompt ({len(system_prompt)} chars) to GPT LLM{call_type_info}")
+        
+        # Generate response using GPT with enhanced context
         response = await llm_service.generate_response(
             user_input=request.text,
             conversation_history=request.conversation_history,
             use_cache=request.use_cache,
-            domain_context=request.domain_context
+            domain_context=enhanced_context
         )
         
         # EMOJI PURGING: Remove emojis from LLM response to prevent TTS encoding issues
         original_response = response
         response = _purge_emojis_from_llm_response(response)
         if response != original_response:
-            logging.info(f"[EMOJI_PURGE_LLM] Cleaned emoji from LLM response")
+            logging.info(f"[EMOJI_PURGE_LLM] Cleaned emoji from GPT LLM response")
+        
+        # Add assistant response to conversation history
+        if conversation_id:
+            conversation_manager.add_message(conversation_id, "assistant", response)
         
         processing_time = time.time() - start_time
         
@@ -277,7 +333,8 @@ async def generate_response(request: GenerateRequest) -> GenerateResponse:
             processing_time_seconds=round(processing_time, 3),
             model_used="gpt-oss",
             cache_hit=cache_hit,
-            tokens_generated=len(response.split())  # Approximate token count
+            tokens_generated=len(response.split()),  # Approximate token count
+            conversation_id=conversation_id  # Return conversation ID for tracking
         )
         
     except Exception as e:
@@ -486,6 +543,56 @@ async def get_model_info():
             "gpu_24gb+": "Ultra-fast performance"
         }
     }
+
+# PROMPT MANAGEMENT ENDPOINTS
+@app.get("/prompts")
+async def get_prompts_info():
+    """Get information about loaded prompts"""
+    try:
+        available_prompts = prompt_loader.get_available_prompts()
+        system_prompt = prompt_loader.get_system_prompt()
+        
+        return {
+            "model": "gpt",
+            "prompts_directory": str(prompt_loader.get_prompts_directory()),
+            "available_prompts": available_prompts,
+            "total_prompts": len(available_prompts),
+            "system_prompt_length": len(system_prompt),
+            "system_prompt_preview": system_prompt[:200] + "..." if len(system_prompt) > 200 else system_prompt
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prompts info: {str(e)}")
+
+@app.post("/prompts/reload")
+async def reload_prompts():
+    """Reload prompts from the docs/prompts folder"""
+    try:
+        prompts = prompt_loader.reload_prompts()
+        return {
+            "message": "Prompts reloaded successfully",
+            "total_prompts": len(prompts),
+            "loaded_prompts": list(prompts.keys())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload prompts: {str(e)}")
+
+@app.get("/prompts/{prompt_name}")
+async def get_specific_prompt(prompt_name: str):
+    """Get content of a specific prompt file"""
+    try:
+        prompts = prompt_loader.load_all_prompts()
+        if prompt_name not in prompts:
+            raise HTTPException(status_code=404, detail=f"Prompt '{prompt_name}' not found")
+        
+        return {
+            "prompt_name": prompt_name,
+            "content": prompts[prompt_name],
+            "length": len(prompts[prompt_name])
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get prompt: {str(e)}")
 
 if __name__ == "__main__":
     # Configure logging

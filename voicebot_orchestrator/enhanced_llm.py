@@ -99,6 +99,9 @@ class EnhancedMistralLLM:
         """
         if not user_input or not user_input.strip():
             raise ValueError("User input cannot be empty")
+
+        # Store domain context for use in LLM response generation
+        self._current_domain_context = domain_context
         
         # Step 1: Check semantic cache first
         if self.cache and use_cache:
@@ -206,9 +209,18 @@ class EnhancedMistralLLM:
         # Add current input
         full_prompt = f"{context}Human: {user_input}\nAssistant: "
         
-        # Simulate adapter influence on response
-        if adapter_name == "banking-lora":
-            response = self._generate_banking_response(user_input)
+        # Check if we have banking domain context or system prompt
+        # This is a temporary solution - in production you'd use actual LLM with system prompts
+        has_banking_context = (
+            (adapter_name == "banking-lora") or
+            (hasattr(self, '_current_domain_context') and 
+             self._current_domain_context and 
+             any(keyword in self._current_domain_context.lower() for keyword in 
+                 ["alex", "finally payoff", "banking", "loan", "debt", "apr", "credit"]))
+        )
+        
+        if has_banking_context:
+            response = self._generate_banking_response_enhanced(user_input)
         elif adapter_name == "compliance-lora":
             response = self._generate_compliance_response(user_input)
         else:
@@ -216,6 +228,49 @@ class EnhancedMistralLLM:
         
         return response
     
+    def _generate_banking_response_enhanced(self, user_input: str) -> str:
+        """Generate Alex banking specialist response with persona awareness."""
+        
+        # Alex banking specialist responses based on common scenarios
+        input_lower = user_input.lower()
+        
+        # Introduction scenarios
+        if any(phrase in input_lower for phrase in ["hello", "hi", "what is your name", "who are you", "introduce"]):
+            return "Hi, I'm Alex with Finally Payoff Debt. I'm a banking specialist helping people break free from high-interest debt. How can I assist you today?"
+        
+        # Debt-related inquiries
+        if any(phrase in input_lower for phrase in ["debt", "owe", "credit card", "balance"]):
+            if any(amount in input_lower for amount in ["$", "dollar", "thousand", "k"]):
+                return "I understand you're dealing with debt. High-interest credit cards can be overwhelming, but there are solutions. A personal loan could potentially save you thousands in interest. What's your current interest rate?"
+            return "Debt can feel overwhelming, but you've taken the right first step by reaching out. I help people consolidate high-interest debt into lower-rate personal loans. Can you tell me about your current debt situation?"
+        
+        # Loan inquiries
+        if any(phrase in input_lower for phrase in ["loan", "borrow", "financing", "consolidate"]):
+            return "Great question! Personal loans can be an excellent tool for debt consolidation. Our rates start as low as 5.99% APR for qualified borrowers - much lower than most credit cards. What's prompting you to consider a loan today?"
+        
+        # APR/Interest rate questions
+        if any(phrase in input_lower for phrase in ["apr", "interest", "rate", "percent", "%"]):
+            return "APR is the annual percentage rate - the total yearly cost of your loan including interest and fees. Credit cards often charge 18-29% APR, while personal loans typically range from 5.99% to 35.99%. Lower APR means more money stays in your pocket!"
+        
+        # Qualification questions
+        if any(phrase in input_lower for phrase in ["qualify", "eligible", "approve", "credit score", "requirements"]):
+            return "Great question! We work with a range of credit profiles. Generally, we look for stable income, reasonable debt-to-income ratio, and credit scores as low as 580. The better your credit, the lower your rate. Would you like me to help you check your potential rate?"
+        
+        # Savings calculations
+        if any(phrase in input_lower for phrase in ["save", "savings", "how much", "calculate", "payment"]):
+            return "Let me help you calculate potential savings! If you have $15,000 in credit card debt at 24% APR making minimum payments, you'd pay over $40,000 total. With a 12% personal loan, you could save over $15,000 and be debt-free in 5 years instead of 30+!"
+        
+        # Application process
+        if any(phrase in input_lower for phrase in ["apply", "application", "start", "sign up", "get started"]):
+            return "I'm excited to help you get started! The application takes just a few minutes, and you can see your rate without affecting your credit score. We'll need basic information like income, employment, and current debts. Ready to begin?"
+        
+        # Concerns or objections
+        if any(phrase in input_lower for phrase in ["worried", "concern", "risk", "safe", "legitimate", "scam"]):
+            return "I completely understand your caution - it's smart to ask questions! Finally Payoff Debt has helped thousands of customers save money and pay off debt faster. We're fully licensed and regulated. Your information is secure, and checking your rate won't impact your credit score."
+        
+        # Default banking specialist response
+        return "As your banking specialist, I'm here to help you understand your options and find the best solution for your financial goals. What specific aspect of your finances would you like to discuss today?"
+
     def _generate_banking_response(self, user_input: str) -> str:
         """Generate banking-domain enhanced response."""
         banking_keywords = {

@@ -2,7 +2,42 @@
 0
 #!/usr/bin/env python3
 """
-Voicebot Orchestrator Launcher
+V    print("    pri    pr    print("🔧 SERVICE MANAGEMENT:                  [DEPLOY] DEPLOYMENT:")
+    print("  1. Enhanced Service Manager            8. Docker Compose Setup")
+    print("  2. Check Service Status                9. Kubernetes Instructions")
+    print("                                         10. Installation Guide")
+    print("🧪 TESTING SUITES:                      ")
+    print("  3. Interactive Pipeline Tester        [DEMO] DEMOS & EXAMPLES:")
+    print("  4. Other Tests                        11. Enterprise CLI Demo")
+    print("                                         12. Sprint 6 Demo")
+    print("📊 ANALYTICS & MONITORING:              13. Voice Conversation Demo")
+    print("  5. Analytics Dashboard                ")
+    print("  6. Performance Report                 ")
+    print("  7. Cache Statistics                   ")E MANAGEMENT:                  [DEPLOY] DEPLOYMENT:")
+    print("  1. Enhanced Service Manager            8. Docker Compose Setup")
+    print("  2. Check Service Status                9. Kubernetes Instructions")
+    print("                                         10. Installation Guide")
+    print("🧪 TESTING SUITES:                      ")
+    print("  3. Interactive Pipeline Tester        [DEMO] DEMOS & EXAMPLES:")
+    print("  4. Other Tests                        11. Enterprise CLI Demo") SERVICE MANAGEMENT:                  🐳 DEPLOYMENT:")
+    print("  1. Enhanced Service Manager            8. Docker Compose Setup")
+    print("  2. Check Service Status                9. Kubernetes Instructions")
+    print("                                         10. Installation Guide")
+    print("🧪 TESTING SUITES:                      ")
+    print("  3. Interactive Pipeline Tester        🚀 DEMOS & EXAMPLES:")
+    print("  4. Other Tests                        11. Enterprise CLI Demo")CE MANAGEMENT:                  ")
+    print("  1. Enhanced Service Manager            ")
+    print("  2. Check Service Status                ")
+    print("                                         ")
+    print("🧪 TESTING SUITES:                      🐳 DEPLOYMENT:")
+    print("  3. Interactive Pipeline Tester        8. Docker Compose Setup")
+    print("  4. Other Tests                        9. Kubernetes Instructions")
+    print("                                         10. Installation Guide")
+    print("📊 ANALYTICS & MONITORING:              ")
+    print("  5. Analytics Dashboard                🚀 DEMOS & EXAMPLES:")
+    print("  6. Performance Report                 11. Enterprise CLI Demo")
+    print("  7. Cache Statistics                   12. Sprint 6 Demo")
+    print("                                         13. Voice Conversation Demo")estrator Launcher
 
 Main entry point for launching different components of the voicebot orchestration platform.
 Provides a unified interface for testing, services, and deployment.
@@ -24,43 +59,28 @@ def print_banner():
     print("=" * 60)
     print("🤖 VOICEBOT ORCHESTRATION PLATFORM LAUNCHER")
     print("   Enterprise-Grade Banking Voice AI")
-    print("   Sprint 6 Complete | Independent Services Ready")
+    print("     Writen by Mike Nikolas 2025")
     print("=" * 60)
     print()
 
 def show_main_menu():
     """Show the main menu."""
-    print("=" * 60)
+    print("=" * 80)
     print("📋 MAIN MENU")
-    print("=" * 60)
+    print("=" * 80)
     print()
-    print("🔧 SERVICE MANAGEMENT:")
-    print("  1. Launch Enhanced Service Manager (Independent Services)")
-    print("  2. Check Service Status")
-    print()
-    print("🧪 TESTING SUITES:")
-    print("  3. Run All Tests")
-    print("  4. Run TTS/LLM Combination Tests")
-    print("  5. Run Independent Services Tests")
-    print("  6. Run Pipeline Tests (Currently Running Services)")
-    print("  7. Test Interactive Pipeline (Select Specific Services)")
-    print("  8. Run Specific Test Suite")
-    print("  9. Test Menu (Batch Scripts)")
-    print()
-    print("🚀 DEMOS & EXAMPLES:")
-    print("  10. Enterprise CLI Demo (Production Validation)")
-    print("  11. Run Sprint 6 Demo")
-    print("  12. Voice Conversation Demo")
-    print()
-    print("📊 ANALYTICS & MONITORING:")
-    print("  13. Analytics Dashboard")
-    print("  14. Performance Report")
-    print("  15. Cache Statistics")
-    print()
-    print("🐳 DEPLOYMENT:")
-    print("  16. Docker Compose Setup")
-    print("  17. Kubernetes Instructions")
-    print("  18. Installation Guide")
+    print("🔧 SERVICE MANAGEMENT:                  � DEPLOYMENT:")
+    print("  1. Enhanced Service Manager            8. Docker Compose Setup")
+    print("  2. Check Service Status                9. Kubernetes Instructions")
+    print("                                         10. Installation Guide")
+    print("🧪 TESTING SUITES:                      ")
+    print("  3. Interactive Pipeline Tester        � DEMOS & EXAMPLES:")
+    print("  4. Other Tests                        11. Enterprise CLI Demo")
+    print("                                         12. Sprint 6 Demo")
+    print("📊 ANALYTICS & MONITORING:              13. Voice Conversation Demo")
+    print("  5. Analytics Dashboard                ")
+    print("  6. Performance Report                 ")
+    print("  7. Cache Statistics                   ")
     print()
     print("  0. Exit")
     print()
@@ -108,9 +128,10 @@ def launch_original_orchestrator():
         print("Alternative: Try running 'python scripts/utilities/start_server.py' or 'uvicorn voicebot_orchestrator.main:app'")
 
 def check_service_status():
-    """Check status of all services."""
+    """Check status of all services with option to cancel."""
     print("-" * 40)
     print("🔍 Checking Service Status...")
+    print("💡 Press Ctrl+C at any time to cancel and go back")
     print("-" * 40)
     
     services = {
@@ -130,7 +151,8 @@ def check_service_status():
         
         for service_name, url in services.items():
             try:
-                response = requests.get(f"{url}/health", timeout=3)
+                # Reduced timeout from 3 to 1 second for faster checking
+                response = requests.get(f"{url}/health", timeout=1)
                 if response.status_code == 200:
                     print(f"✅ {service_name}: Running ({url})")
                 else:
@@ -141,6 +163,9 @@ def check_service_status():
     except ImportError:
         print("❌ requests library not available. Cannot check services.")
         print("Install with: pip install requests")
+    except KeyboardInterrupt:
+        print("\n⏪ Status check cancelled by user")
+        return
 
 async def run_all_tests():
     """Run all test suites."""
@@ -200,16 +225,47 @@ async def run_interactive_pipeline_tests():
     """Run interactive pipeline tests with service selection."""
     print("🎯 Running Interactive Pipeline Tests...")
     print("=" * 50)
-    print("This will let you:")
-    print("  🎙️ Select specific STT service")
-    print("  🧠 Select specific LLM service") 
-    print("  🔊 Select specific TTS service")
-    print("  🎯 Test individual components or full pipeline")
-    print("Only shows services that are currently running!")
-    print()
     
     tests_dir = project_root / "tests"
     subprocess.run([sys.executable, "test_interactive_pipeline.py"], cwd=tests_dir)
+
+def show_other_tests_menu():
+    """Show other tests submenu."""
+    print("=" * 60)
+    print("🧪 OTHER TESTS MENU")
+    print("=" * 60)
+    print()
+    print("  1. Run All Tests")
+    print("  2. TTS/LLM Combination Tests") 
+    print("  3. Independent Services Tests")
+    print("  4. Pipeline Tests (Running Services)")
+    print("  5. Specific Test Suite")
+    print("  6. Test Menu (Batch Scripts)")
+    print("  0. Back to Main Menu")
+    print()
+    
+    choice = input("Enter your choice (0-6): ").strip()
+    
+    if choice == "0":
+        return
+    elif choice == "1":
+        asyncio.run(run_all_tests())
+    elif choice == "2":
+        asyncio.run(run_combination_tests())
+    elif choice == "3":
+        tests_dir = project_root / "tests"
+        subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
+    elif choice == "4":
+        asyncio.run(run_pipeline_tests())
+    elif choice == "5":
+        print("🔧 Run Specific Test Suite - Feature coming soon!")
+    elif choice == "6":
+        launch_test_menu()
+    else:
+        print("❌ Invalid choice. Please enter 0-6.")
+        
+    if choice != "0":
+        input("\nPress Enter to continue...")
 
 def launch_test_menu():
     """Launch the batch test menu."""
@@ -336,7 +392,7 @@ def show_cache_stats():
 
 def show_docker_setup():
     """Show Docker Compose setup."""
-    print("🐳 Docker Compose Setup...")
+    print("[DEPLOY] Docker Compose Setup...")
     print("-" * 40)
     print()
     print("Available Docker profiles:")
@@ -418,45 +474,32 @@ async def main():
             elif choice == "2":
                 check_service_status()
             elif choice == "3":
-                await run_all_tests()
-            elif choice == "4":
-                await run_combination_tests()
-            elif choice == "5":
-                # Run independent services tests specifically
-                tests_dir = project_root / "tests"
-                subprocess.run([sys.executable, "test_independent_combinations.py"], cwd=tests_dir)
-            elif choice == "6":
-                await run_pipeline_tests()
-            elif choice == "7":
                 await run_interactive_pipeline_tests()
-            elif choice == "8":
-                # Run specific test suite placeholder
-                print("🔧 Run Specific Test Suite - Feature coming soon!")
-            elif choice == "9":
-                launch_test_menu()
-            elif choice == "10":
-                run_cli_demo()
-            elif choice == "11":
-                run_sprint6_demo()
-            elif choice == "12":
-                run_voice_demo()
-            elif choice == "13":
+            elif choice == "4":
+                show_other_tests_menu()
+            elif choice == "5":
                 show_analytics()
-            elif choice == "14":
+            elif choice == "6":
                 show_performance_report()
-            elif choice == "15":
+            elif choice == "7":
                 show_cache_stats()
-            elif choice == "16":
+            elif choice == "8":
                 show_docker_setup()
-            elif choice == "17":
+            elif choice == "9":
                 show_kubernetes_instructions()
-            elif choice == "18":
+            elif choice == "10":
                 show_installation_guide()
+            elif choice == "11":
+                run_cli_demo()
+            elif choice == "12":
+                run_sprint6_demo()
+            elif choice == "13":
+                run_voice_demo()
             else:
-                print("❌ Invalid choice. Please enter 0-18.")
+                print("❌ Invalid choice. Please enter 0-13.")
             
             # Only pause for informational displays, not for actions that launch other programs
-            if choice in ["2", "16", "17", "18"]:  # Status checks and info displays
+            if choice in ["2", "8", "9", "10"]:  # Status checks and info displays
                 input("\nPress Enter to continue...")
                 print("\n" + "="*50 + "\n")
                 

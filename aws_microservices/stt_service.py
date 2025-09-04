@@ -38,10 +38,11 @@ async def startup_event():
     logging.info("🎙️ Initializing STT Microservice...")
     
     try:
-        # Initialize with optimal settings for AWS
+        # Initialize with optimal settings for better accuracy
         stt_service = WhisperSTT(
-            model_name="base",  # Good balance of speed/accuracy
-            device="cpu"        # CPU-only for cost optimization
+            model_name="small",      # Better accuracy than base (small is good balance)
+            device="cpu",            # CPU-only for compatibility 
+            use_faster_whisper=True  # Use faster-whisper for better performance
         )
         logging.info("✅ STT Microservice ready!")
     except Exception as e:
