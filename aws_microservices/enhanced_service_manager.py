@@ -180,15 +180,15 @@ class EnhancedServiceManager:
             },
             "efficient": {
                 "name": "Efficient Combo",
-                "description": "Orchestrator + Whisper STT + Mistral LLM + Dia 4-bit TTS (Speed optimized)",
-                "services": ["orchestrator", "whisper_stt", "hira_dia_tts", "mistral_llm"],
-                "use_case": "Fast processing with dedicated 4-bit TTS for quick responses and Whisper accuracy"
+                "description": "Orchestrator + Whisper STT + Mistral LLM + Zonos TTS (Neural speech synthesis)",
+                "services": ["orchestrator", "whisper_stt", "zonos_tts", "mistral_llm"],
+                "use_case": "Fast processing with neural speech synthesis for natural responses and Whisper accuracy"
             },
             "quality": {
                 "name": "Quality Combo",
-                "description": "Orchestrator + Whisper STT + GPT LLM + Hira Dia TTS (Maximum quality)",
-                "services": ["orchestrator", "whisper_stt", "hira_dia_tts", "gpt_llm"],
-                "use_case": "High-quality content, professional presentations with Whisper accuracy"
+                "description": "Orchestrator + Whisper STT + GPT LLM + Zonos TTS (High-quality neural speech)",
+                "services": ["orchestrator", "whisper_stt", "zonos_tts", "gpt_llm"],
+                "use_case": "High-quality neural speech with advanced reasoning for professional applications"
             },
             "premium": {
                 "name": "Premium Combo",
@@ -1092,9 +1092,9 @@ class EnhancedServiceManager:
         print("\n📋 Service Combinations (Following existing patterns):")
         print("  1. Show detailed service status")
         print("  2. Start Fast Combo (Orchestrator + Whisper STT + Mistral LLM + Kokoro TTS)")
-        print("  3. Start Efficient Combo (Orchestrator + Whisper STT + Mistral LLM + Dia 4-bit TTS)")
+        print("  3. Start Efficient Combo (Orchestrator + Whisper STT + Mistral LLM + Zonos TTS)")
         print("  4. Start Balanced Combo (Orchestrator + Whisper STT + GPT LLM + Kokoro TTS)")
-        print("  5. Start Quality Combo (Orchestrator + Whisper STT + GPT LLM + Hira Dia TTS)")
+        print("  5. Start Quality Combo (Orchestrator + Whisper STT + GPT LLM + Zonos TTS)")
         print("  6. Start Premium Combo (Orchestrator + Whisper STT + GPT LLM + Tortoise TTS)")
         
         print("\n⚙️  Service Management:")
