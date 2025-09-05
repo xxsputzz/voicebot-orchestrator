@@ -268,9 +268,149 @@ class EnhancedServiceManager:
         if confirmation != 'FORCE':
             print("❌ Force stop cancelled")
             return False
-            
+        
+        # Run comprehensive cleanup including Ollama and GPU memory
+        self.comprehensive_memory_cleanup(force_python=True)
+        return True
+    
+    def comprehensive_memory_cleanup(self, force_python=False):
+        """Comprehensive memory cleanup including Ollama, Python services, and GPU memory"""
+        print("\n🧹 Starting comprehensive memory cleanup...")
+        
+        total_cleaned = 0
+        
+        # Step 1: Clean up Ollama processes
+        print("\n🦙 Cleaning up Ollama processes...")
+        ollama_cleaned = self.cleanup_ollama_processes()
+        total_cleaned += ollama_cleaned
+        
+        # Step 2: Clean up Python service processes
+        if force_python:
+            print("\n🐍 Force stopping ALL Python processes...")
+            python_cleaned = self.force_stop_python_processes()
+            total_cleaned += python_cleaned
+        else:
+            print("\n🐍 Cleaning up Python service processes...")
+            python_cleaned = self.cleanup_python_service_processes()
+            total_cleaned += python_cleaned
+        
+        # Step 3: GPU memory cleanup
+        print("\n🎮 Cleaning up GPU memory...")
+        self.cleanup_gpu_memory()
+        
+        # Step 4: System garbage collection
+        print("\n🗑️ Running system cleanup...")
+        self.force_garbage_collection()
+        
+        print(f"\n✅ Comprehensive cleanup completed! Cleaned up {total_cleaned} processes")
+        
+        # Show final resource status
+        self.show_resource_status()
+    
+    def cleanup_ollama_processes(self):
+        """Clean up Ollama processes and free memory"""
+        cleaned_count = 0
+        
         try:
-            stopped_count = 0
+            # First try graceful Ollama stop
+            print("   Attempting graceful Ollama model unload...")
+            try:
+                subprocess.run(["ollama", "stop"], capture_output=True, text=True, timeout=10)
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                print("   Ollama command not available or timed out")
+            
+            time.sleep(2)
+            
+            # Find and terminate large Ollama processes
+            large_ollama_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'memory_info']):
+                try:
+                    if 'ollama' in proc.info['name'].lower():
+                        memory_mb = proc.info['memory_info'].rss / (1024 * 1024)
+                        if memory_mb > 100:  # Only target processes using > 100MB
+                            large_ollama_processes.append((proc.pid, memory_mb))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            if large_ollama_processes:
+                print(f"   Found {len(large_ollama_processes)} large Ollama processes")
+                for pid, memory_mb in large_ollama_processes:
+                    try:
+                        proc = psutil.Process(pid)
+                        proc.terminate()
+                        proc.wait(timeout=5)
+                        print(f"   ✅ Terminated Ollama process {pid} ({memory_mb:.0f} MB)")
+                        cleaned_count += 1
+                    except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                        try:
+                            proc.kill()
+                            cleaned_count += 1
+                        except:
+                            pass
+                    except Exception as e:
+                        print(f"   ⚠️ Could not terminate Ollama {pid}: {e}")
+            else:
+                print("   ✅ No large Ollama processes found")
+                
+        except Exception as e:
+            print(f"   ❌ Error cleaning Ollama: {e}")
+        
+        return cleaned_count
+    
+    def cleanup_python_service_processes(self):
+        """Clean up Python service processes (non-destructive)"""
+        cleaned_count = 0
+        service_keywords = ['stt_service', 'tts_service', 'llm_service', 'orchestrator', 'start_server']
+        
+        try:
+            python_services = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'memory_info']):
+                try:
+                    if proc.info['name'].lower().startswith('python') and proc.info['cmdline']:
+                        cmdline = ' '.join(proc.info['cmdline']).lower()
+                        if any(keyword in cmdline for keyword in service_keywords):
+                            # Don't kill our own process
+                            if proc.pid == os.getpid():
+                                continue
+                            memory_mb = proc.info['memory_info'].rss / (1024 * 1024)
+                            python_services.append({
+                                'pid': proc.pid,
+                                'cmdline': cmdline,
+                                'memory_mb': memory_mb
+                            })
+                except (psutil.NoSuchProcess, psutil.AccessDenied, TypeError):
+                    continue
+            
+            if python_services:
+                print(f"   Found {len(python_services)} Python service processes")
+                for service in python_services:
+                    try:
+                        proc = psutil.Process(service['pid'])
+                        proc.terminate()
+                        proc.wait(timeout=3)
+                        print(f"   ✅ Stopped service {service['pid']} ({service['memory_mb']:.0f} MB)")
+                        cleaned_count += 1
+                    except psutil.TimeoutExpired:
+                        try:
+                            proc.kill()
+                            cleaned_count += 1
+                        except:
+                            pass
+                    except Exception as e:
+                        print(f"   ⚠️ Could not stop {service['pid']}: {e}")
+            else:
+                print("   ✅ No Python service processes found")
+                
+        except Exception as e:
+            print(f"   ❌ Error cleaning Python services: {e}")
+        
+        return cleaned_count
+    
+    def force_stop_python_processes(self):
+        """Force stop all Python processes (original nuclear option)"""
+        cleaned_count = 0
+        
+        try:
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
                     if proc.info['name'].lower() in ['python.exe', 'python', 'pythonw.exe']:
@@ -278,23 +418,83 @@ class EnhancedServiceManager:
                         if proc.pid == os.getpid():
                             continue
                             
-                        print(f"🛑 Stopping Python process {proc.pid}: {proc.info['name']}")
+                        print(f"   🛑 Stopping Python process {proc.pid}: {proc.info['name']}")
                         proc.terminate()
                         try:
                             proc.wait(timeout=3)
                         except psutil.TimeoutExpired:
                             proc.kill()
-                        stopped_count += 1
+                        cleaned_count += 1
                         
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
                     
-            print(f"✅ Force stopped {stopped_count} Python processes")
-            return True
-            
         except Exception as e:
-            print(f"❌ Error force stopping processes: {e}")
-            return False
+            print(f"   ❌ Error force stopping processes: {e}")
+        
+        return cleaned_count
+    
+    def cleanup_gpu_memory(self):
+        """Clean up GPU memory caches"""
+        try:
+            # Try PyTorch cache cleanup
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    print("   ✅ Cleared PyTorch CUDA cache")
+            except ImportError:
+                print("   PyTorch not available for GPU cleanup")
+            except Exception as e:
+                print(f"   ⚠️ Could not clear PyTorch cache: {e}")
+            
+            # Try TensorFlow cleanup (if available)
+            try:
+                import tensorflow as tf
+                tf.keras.backend.clear_session()
+                print("   ✅ Cleared TensorFlow session")
+            except ImportError:
+                pass  # TensorFlow not available
+            except Exception as e:
+                print(f"   ⚠️ Could not clear TensorFlow session: {e}")
+                
+        except Exception as e:
+            print(f"   ❌ Error cleaning GPU memory: {e}")
+    
+    def force_garbage_collection(self):
+        """Force garbage collection"""
+        try:
+            import gc
+            collected = gc.collect()
+            print(f"   ✅ Garbage collection freed {collected} objects")
+        except Exception as e:
+            print(f"   ❌ Error with garbage collection: {e}")
+    
+    def show_resource_status(self):
+        """Show current resource usage status"""
+        try:
+            print("\n📊 Current Resource Status:")
+            
+            # System memory
+            memory = psutil.virtual_memory()
+            print(f"   💾 Memory: {memory.percent:.1f}% used ({memory.available / (1024**3):.1f} GB available)")
+            
+            # GPU memory (if available)
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    used, total = map(int, result.stdout.strip().split(', '))
+                    gpu_percent = (used/total)*100
+                    print(f"   🎮 GPU Memory: {gpu_percent:.1f}% used ({used} MB of {total} MB)")
+            except:
+                print("   🎮 GPU Memory: Status unavailable")
+                
+        except Exception as e:
+            print(f"   ❌ Could not get resource status: {e}")
     
     def start_service(self, service_name: str) -> bool:
         """Start a specific service (optimized for speed)"""
@@ -993,8 +1193,8 @@ class EnhancedServiceManager:
                 print(f"  {config['description']}: http://localhost:{config['port']}")
     
     def stop_all_services(self):
-        """Stop all running services (both managed and independent)"""
-        print(f"\n🛑 Stopping all services...")
+        """Stop all running services (both managed and independent) with memory cleanup"""
+        print(f"\n🛑 Stopping all services with comprehensive cleanup...")
         
         # Get current status to find all running services
         status = self.get_service_status(fast_mode=False)
@@ -1002,8 +1202,12 @@ class EnhancedServiceManager:
         
         if not running_services:
             print("⏹️  No services are currently running")
+            # Still do memory cleanup even if no services are running
+            print("\n🧹 Performing memory cleanup anyway...")
+            self.comprehensive_memory_cleanup(force_python=False)
             return
         
+        # First, stop services gracefully
         stopped_count = 0
         for service_name in running_services:
             print(f"🛑 Stopping {service_name}...")
@@ -1021,6 +1225,10 @@ class EnhancedServiceManager:
         self.invalidate_cache()
         
         print(f"✅ Stopped {stopped_count}/{len(running_services)} services")
+        
+        # Now perform comprehensive memory cleanup
+        print(f"\n🧹 Performing comprehensive memory cleanup...")
+        self.comprehensive_memory_cleanup(force_python=False)
     
     def test_running_services(self):
         """Test all currently running services with individual service testing option"""

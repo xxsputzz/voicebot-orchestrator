@@ -24,6 +24,7 @@ import wave
 import threading
 import logging
 import os
+import concurrent.futures
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Set
@@ -242,8 +243,8 @@ class InteractivePipelineTester:
         
         return chunks
         
-    def check_service_health(self, service_name: str, endpoint: str, timeout: float = 3) -> bool:
-        """Check if a service is running and healthy"""
+    def check_service_health(self, service_name: str, endpoint: str, timeout: float = 1) -> bool:
+        """Check if a service is running and healthy - optimized for speed"""
         try:
             # Try health endpoint first - disable requests logging to reduce noise
             import urllib3
@@ -265,47 +266,127 @@ class InteractivePipelineTester:
         
         return False
     
-    def detect_available_services(self) -> Dict:
-        """Detect which services are currently available"""
-        print("🔍 Checking service availability...")
+    def check_service_health_fast(self, service_name: str, config: Dict) -> Dict:
+        """Fast concurrent health check for a single service"""
+        endpoint = config["url"]
+        is_healthy = False
+        
+        try:
+            # Ultra-fast check with 0.5 second timeout
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            # Use session with shorter timeout for better control
+            with requests.Session() as session:
+                session.timeout = 0.5
+                health_response = session.get(f"{endpoint}/health", timeout=0.5)
+                if health_response.status_code == 200:
+                    is_healthy = True
+                else:
+                    # Fallback with 0.5 second timeout
+                    root_response = session.get(endpoint, timeout=0.5)
+                    if root_response.status_code in [200, 404]:
+                        is_healthy = True
+                        
+        except Exception:
+            # Silent fail - service is not available
+            pass
+        
+        return {
+            'name': service_name,
+            'config': config,
+            'healthy': is_healthy,
+            'endpoint': endpoint
+        }
+    
+    def detect_available_services_fast(self) -> Dict:
+        """Fast parallel detection of available services"""
+        print("🔍 Fast service availability check...")
         print("-" * 40)
         
         available = {}
         
-        with suppress_http_logs():  # Suppress INFO logs during health checks
-            for service_name, config in self.all_services.items():
-                endpoint = config["url"]
-                if self.check_service_health(service_name, endpoint):
-                    available[service_name] = config
-                    print(f"  ✅ {service_name:<20} - {endpoint}")
-                else:
-                    print(f"  ❌ {service_name:<20} - Not available")
+        # Use ThreadPoolExecutor for concurrent checks
+        with suppress_http_logs():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                try:
+                    # Submit all service checks concurrently
+                    future_to_service = {
+                        executor.submit(self.check_service_health_fast, name, config): name 
+                        for name, config in self.all_services.items()
+                    }
+                    
+                    # Collect results as they complete with timeout
+                    for future in concurrent.futures.as_completed(future_to_service, timeout=2):
+                        try:
+                            result = future.result(timeout=0.1)  # Quick result extraction
+                            if result['healthy']:
+                                available[result['name']] = result['config']
+                                print(f"  ✅ {result['name']:<20} - {result['endpoint']}")
+                            else:
+                                print(f"  ❌ {result['name']:<20} - Not available")
+                        except Exception:
+                            service_name = future_to_service[future]
+                            print(f"  ❌ {service_name:<20} - Check failed")
+                            
+                except concurrent.futures.TimeoutError:
+                    # Handle remaining futures that didn't complete
+                    for future, service_name in future_to_service.items():
+                        if not future.done():
+                            print(f"  ❌ {service_name:<20} - Timeout")
+                            future.cancel()
         
         self.available_services = available
         
         print(f"\n📊 Available: {len(available)} services")
         return available
     
+    def detect_available_services(self) -> Dict:
+        """Detect which services are currently available (legacy method - now uses fast version)"""
+        return self.detect_available_services_fast()
+    
     def detect_services_by_types(self, required_types: list, fast_check: bool = True) -> Dict:
-        """Detect services of specific types only - optimized for speed"""
-        print("🔍 Checking service availability...")
+        """Detect services of specific types only - optimized for concurrent speed"""
+        print("🔍 Fast service availability check...")
         print("-" * 40)
         
         available = {}
         relevant_services = {name: config for name, config in self.all_services.items() 
                            if config["type"] in required_types}
         
-        # Use shorter timeout for fast check
-        timeout = 1 if fast_check else 3
+        if not relevant_services:
+            print(f"\n📊 No {'/'.join(required_types).upper()} services configured")
+            return available
         
-        with suppress_http_logs():  # Suppress INFO logs during health checks
-            for service_name, config in relevant_services.items():
-                endpoint = config["url"]
-                if self.check_service_health(service_name, endpoint, timeout=timeout):
-                    available[service_name] = config
-                    print(f"  ✅ {service_name:<20} - {endpoint}")
-                else:
-                    print(f"  ❌ {service_name:<20} - Not available")
+        # Use concurrent checking for speed
+        with suppress_http_logs():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                try:
+                    # Submit all relevant service checks concurrently
+                    future_to_service = {
+                        executor.submit(self.check_service_health_fast, name, config): name 
+                        for name, config in relevant_services.items()
+                    }
+                    
+                    # Collect results as they complete with timeout
+                    for future in concurrent.futures.as_completed(future_to_service, timeout=2):
+                        try:
+                            result = future.result(timeout=0.1)  # Quick result extraction
+                            if result['healthy']:
+                                available[result['name']] = result['config']
+                                print(f"  ✅ {result['name']:<20} - {result['endpoint']}")
+                            else:
+                                print(f"  ❌ {result['name']:<20} - Not available")
+                        except Exception:
+                            service_name = future_to_service[future]
+                            print(f"  ❌ {service_name:<20} - Check timeout")
+                            
+                except concurrent.futures.TimeoutError:
+                    # Handle remaining futures that didn't complete
+                    for future, service_name in future_to_service.items():
+                        if not future.done():
+                            print(f"  ❌ {service_name:<20} - Timeout")
+                            future.cancel()
         
         # Update available services (don't overwrite, just add found ones)
         self.available_services.update(available)
