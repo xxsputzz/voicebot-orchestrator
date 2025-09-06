@@ -241,10 +241,11 @@ def show_other_tests_menu():
     print("  4. Pipeline Tests (Running Services)")
     print("  5. Specific Test Suite")
     print("  6. Test Menu (Batch Scripts)")
+    print("  7. 🎤 Microphone Testing Suite")
     print("  0. Back to Main Menu")
     print()
     
-    choice = input("Enter your choice (0-6): ").strip()
+    choice = input("Enter your choice (0-7): ").strip()
     
     if choice == "0":
         return
@@ -261,8 +262,10 @@ def show_other_tests_menu():
         print("🔧 Run Specific Test Suite - Feature coming soon!")
     elif choice == "6":
         launch_test_menu()
+    elif choice == "7":
+        run_microphone_testing_suite()
     else:
-        print("❌ Invalid choice. Please enter 0-6.")
+        print("❌ Invalid choice. Please enter 0-7.")
         
     if choice != "0":
         input("\nPress Enter to continue...")
@@ -282,6 +285,29 @@ def launch_test_menu():
             print(f"❌ Batch script not found: {batch_script}")
     except Exception as e:
         print(f"❌ Error launching test menu: {e}")
+
+def run_microphone_testing_suite():
+    """Launch the microphone testing suite."""
+    print("🎤 Launching Microphone Testing Suite...")
+    print("-" * 50)
+    print("This suite provides comprehensive testing with real microphone input:")
+    print("  🎤 STT Only - Test speech recognition")
+    print("  🎤➡️🧠 STT → LLM - Speech to AI response") 
+    print("  🧠➡️🗣️ LLM → TTS - Text to speech synthesis")
+    print("  🗣️ TTS Only - Direct text to speech")
+    print("  🎤➡️🧠➡️🗣️ Full Pipeline - Complete voice conversation")
+    print("  🔄 Conversation Loop - Continuous voice chat")
+    print()
+    
+    try:
+        mic_script = project_root / "microphone_test_suite.py"
+        if mic_script.exists():
+            subprocess.run([sys.executable, str(mic_script)], cwd=project_root)
+        else:
+            print("❌ Microphone test suite not found")
+            print("   Expected location: microphone_test_suite.py")
+    except Exception as e:
+        print(f"❌ Error launching microphone testing suite: {e}")
 
 def run_cli_demo():
     """Run Enterprise CLI demonstration with comprehensive validation."""
